@@ -1,0 +1,190 @@
+.page {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 20px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 480px;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+
+/* Animated logo */
+.logoWrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 28px;
+}
+
+.logoPulse {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: var(--blue-100);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.18); opacity: 0.2; }
+}
+
+.logoMark {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: var(--blue-600);
+  color: white;
+  font-size: 18px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 16px rgba(37,99,235,0.35);
+}
+
+.heading {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gray-900);
+  letter-spacing: -0.3px;
+  margin-bottom: 6px;
+}
+
+.subheading {
+  font-size: 14px;
+  color: var(--gray-500);
+  margin-bottom: 24px;
+}
+
+.fileName {
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+/* Progress */
+.progressTrack {
+  height: 6px;
+  background: var(--gray-100);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progressBar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue-500), var(--blue-600));
+  border-radius: 99px;
+  transition: width 0.5s ease;
+}
+
+.progressLabel {
+  font-size: 13px;
+  color: var(--gray-400);
+  margin-bottom: 32px;
+}
+
+/* Steps */
+.steps {
+  list-style: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stepIndicator {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Done */
+.done .stepIndicator {
+  background: #dcfce7;
+  border-radius: 50%;
+}
+
+.checkIcon {
+  font-size: 13px;
+  color: #16a34a;
+  font-weight: 700;
+}
+
+/* Active */
+.active .stepIndicator {
+  background: var(--blue-50);
+  border-radius: 50%;
+}
+
+.spinnerIcon {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--blue-200);
+  border-top-color: var(--blue-600);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Pending */
+.pending .stepIndicator {
+  background: var(--gray-100);
+  border-radius: 50%;
+}
+
+.pendingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-300);
+}
+
+/* Labels */
+.stepLabel {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.done .stepLabel {
+  color: var(--gray-700);
+}
+
+.active .stepLabel {
+  color: var(--blue-700);
+  font-weight: 600;
+}
+
+.pending .stepLabel {
+  color: var(--gray-400);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--gray-400);
+}
+

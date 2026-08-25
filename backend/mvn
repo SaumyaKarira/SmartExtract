@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Wrapper: always run Maven with Java 21 (Temurin)
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+exec /opt/homebrew/bin/mvn "$@"
+

@@ -123,93 +123,124 @@ export default function UploadModal({ open, onClose }: Props) {
           <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">✕</button>
         </div>
 
-        {/* Success state */}
+        {/* Success / Failed state */}
         {uploadState === 'success' && uploadResult ? (
           <div style={{ padding: '1.25rem 1rem 1.5rem', overflowY: 'auto', maxHeight: '70vh' }}>
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <span style={{ fontSize: '1.75rem' }}>✅</span>
-              <div>
-                <p style={{ fontWeight: 600, margin: 0 }}>{uploadResult.fileName}</p>
-                <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0 }}>
-                  Status: <strong style={{ color: '#2563eb' }}>{uploadResult.status}</strong>
-                </p>
-              </div>
-            </div>
 
-            {/* Extracted PO */}
-            {uploadResult.extractedPurchaseOrder ? (() => {
-              const po = uploadResult.extractedPurchaseOrder!;
-              const field = (label: string, value: string | number | null) => value != null ? (
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
-                  <span style={{ color: '#6b7280', minWidth: '110px' }}>{label}</span>
-                  <span style={{ fontWeight: 500, color: '#111827' }}>{String(value)}</span>
-                </div>
-              ) : null;
-
-              return (
+            {/* Status banner */}
+            {uploadResult.status === 'FAILED' ? (
+              /* ── FAILED ── */
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
+                            background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.85rem 1rem' }}>
+                <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>❌</span>
                 <div>
-                  <p style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', marginBottom: '0.6rem' }}>
-                    Extracted Purchase Order
+                  <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#dc2626' }}>Extraction Failed</p>
+                  <p style={{ fontSize: '0.82rem', color: '#7f1d1d', margin: 0 }}>
+                    AI could not extract structured data from <strong>{uploadResult.fileName}</strong>.
+                    The document may be a scanned image or an unrecognised format.
                   </p>
-                  <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1rem' }}>
-                    {field('PO Number', po.poNumber)}
-                    {field('Vendor', po.vendorName)}
-                    {field('Date', po.poDate)}
-                    {field('Payment Terms', po.paymentTerms)}
-                    {field('Total Amount', po.totalAmount != null ? `${po.totalAmount.toLocaleString()}` : null)}
+                </div>
+              </div>
+            ) : (
+              /* ── COMPLETED (PROCESSED) ── */
+              <>
+                {/* Success header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                  <span style={{ fontSize: '1.75rem' }}>✅</span>
+                  <div>
+                    <p style={{ fontWeight: 600, margin: 0 }}>{uploadResult.fileName}</p>
+                    <p style={{ color: '#16a34a', fontSize: '0.8rem', margin: 0, fontWeight: 600 }}>
+                      AI extraction completed
+                    </p>
                   </div>
+                </div>
 
-                  {po.items && po.items.length > 0 && (
-                    <>
-                      <p style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', marginBottom: '0.5rem' }}>
-                        Line Items ({po.items.length})
+                {uploadResult.extractedPurchaseOrder ? (() => {
+                  const po = uploadResult.extractedPurchaseOrder!;
+
+                  const formatCurrency = (val: number | null) =>
+                    val != null
+                      ? `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : null;
+
+                  const field = (label: string, value: string | null) => value != null ? (
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem', fontSize: '0.85rem' }}>
+                      <span style={{ color: '#6b7280', minWidth: '120px', flexShrink: 0 }}>{label}</span>
+                      <span style={{ fontWeight: 500, color: '#111827' }}>{value}</span>
+                    </div>
+                  ) : null;
+
+                  return (
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', marginBottom: '0.6rem' }}>
+                        AI Extracted Details
                       </p>
-                      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', marginBottom: '1rem' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                          <thead>
-                            <tr style={{ background: '#f3f4f6' }}>
-                              {['Description', 'Qty', 'Unit Price', 'Total'].map(h => (
-                                <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {po.items.map((item, i) => (
-                              <tr key={i} style={{ borderBottom: i < po.items.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                                <td style={{ padding: '0.5rem 0.75rem', color: '#111827' }}>{item.description}</td>
-                                <td style={{ padding: '0.5rem 0.75rem', color: '#374151' }}>{item.quantity}</td>
-                                <td style={{ padding: '0.5rem 0.75rem', color: '#374151' }}>{item.unitPrice?.toLocaleString()}</td>
-                                <td style={{ padding: '0.5rem 0.75rem', color: '#111827', fontWeight: 500 }}>{item.totalPrice?.toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1rem' }}>
+                        {field('PO Number', po.poNumber)}
+                        {field('Vendor', po.vendorName)}
+                        {field('Date', po.poDate)}
+                        {field('Payment Terms', po.paymentTerms)}
+                        {field('Total Amount', formatCurrency(po.totalAmount))}
                       </div>
-                    </>
-                  )}
 
-                  {/* Raw extracted text (collapsed) */}
-                  <details style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-                    <summary style={{ cursor: 'pointer', marginBottom: '0.4rem' }}>Raw extracted text</summary>
+                      {po.items && po.items.length > 0 && (
+                        <>
+                          <p style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', marginBottom: '0.5rem' }}>
+                            Line Items ({po.items.length})
+                          </p>
+                          <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', marginBottom: '1rem' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                              <thead>
+                                <tr style={{ background: '#f3f4f6' }}>
+                                  {['Description', 'Qty', 'Unit Price', 'Total'].map(h => (
+                                    <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {po.items.map((item, i) => (
+                                  <tr key={i} style={{ borderBottom: i < po.items.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                                    <td style={{ padding: '0.5rem 0.75rem', color: '#111827' }}>{item.description}</td>
+                                    <td style={{ padding: '0.5rem 0.75rem', color: '#374151' }}>{item.quantity}</td>
+                                    <td style={{ padding: '0.5rem 0.75rem', color: '#374151' }}>
+                                      {item.unitPrice != null ? `₹ ${item.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                                    </td>
+                                    <td style={{ padding: '0.5rem 0.75rem', color: '#111827', fontWeight: 500 }}>
+                                      {item.totalPrice != null ? `₹ ${item.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Raw source text (collapsed) */}
+                      <details style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                        <summary style={{ cursor: 'pointer', userSelect: 'none', marginBottom: '0.4rem', color: '#2563eb', fontWeight: 500 }}>
+                          View source text
+                        </summary>
+                        <pre style={{
+                          background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px',
+                          padding: '0.6rem', maxHeight: '180px', overflowY: 'auto',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#374151', margin: 0,
+                        }}>{uploadResult.extractedText}</pre>
+                      </details>
+                    </div>
+                  );
+                })() : (
+                  // Fallback: no PO extracted
+                  <>
+                    <p style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.85rem', color: '#374151' }}>Extracted Text</p>
                     <pre style={{
                       background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px',
-                      padding: '0.6rem', maxHeight: '180px', overflowY: 'auto',
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#374151', margin: 0,
+                      padding: '0.75rem', fontSize: '0.78rem', lineHeight: '1.6',
+                      maxHeight: '260px', overflowY: 'auto', whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word', color: '#111827', margin: 0,
                     }}>{uploadResult.extractedText}</pre>
-                  </details>
-                </div>
-              );
-            })() : (
-              // Fallback: no PO extracted, show raw text
-              <>
-                <p style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.85rem', color: '#374151' }}>Extracted Text</p>
-                <pre style={{
-                  background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px',
-                  padding: '0.75rem', fontSize: '0.78rem', lineHeight: '1.6',
-                  maxHeight: '260px', overflowY: 'auto', whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word', color: '#111827', margin: 0,
-                }}>{uploadResult.extractedText}</pre>
+                  </>
+                )}
               </>
             )}
 

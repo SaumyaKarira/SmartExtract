@@ -51,7 +51,9 @@ public class PurchaseOrderService {
                 po.getTax(),
                 po.getTotal(),
                 po.getCreatedAt(),
-                items
+                items,
+                po.getDocument() != null && po.getDocument().getStatus() != null
+                        ? po.getDocument().getStatus().name() : null
         );
     }
 

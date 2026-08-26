@@ -19,7 +19,8 @@ public record PurchaseOrderResponse(
         BigDecimal tax,
         BigDecimal total,
         LocalDateTime createdAt,
-        List<PurchaseOrderItemResponse> items
+        List<PurchaseOrderItemResponse> items,
+        String status
 ) {
     public record PurchaseOrderItemResponse(
             Long id,

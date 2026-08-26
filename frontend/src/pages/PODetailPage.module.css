@@ -2,6 +2,23 @@
   max-width: 960px;
 }
 
+/* Back to search */
+.backToSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  background: none;
+  border: none;
+  color: var(--blue-600);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.12s;
+}
+.backToSearch:hover { color: var(--blue-800); text-decoration: underline; }
+
 /* ── Loading / Error states ─────────────────────────────────────────── */
 .loadingBox,
 .errorBox {

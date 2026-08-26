@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import styles from './PODetailPage.module.css';
+import type { SearchState } from './SearchPage';
 
 interface POItem {
   id: number;
@@ -49,6 +50,7 @@ function InfoField({ label, value }: { label: string; value: string }) {
 export default function PODetailPage() {
   const { poId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [po, setPo] = useState<PurchaseOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +59,8 @@ export default function PODetailPage() {
   // Source text passed via navigation state (from upload flow)
   const extractedText: string | null = location.state?.extractedText ?? null;
   const fromUpload: boolean = location.state?.fromUpload === true;
+  const fromSearch: boolean = location.state?.fromSearch === true;
+  const searchState: SearchState | null = location.state?.searchState ?? null;
 
   useEffect(() => {
     api.get<PurchaseOrderDetail>(`/api/purchase-orders/${poId}`)
@@ -87,6 +91,16 @@ export default function PODetailPage() {
 
   return (
     <div className={styles.page}>
+
+      {/* ── Back to Search Results ────────────────────────────────────────── */}
+      {fromSearch && (
+        <button
+          className={styles.backToSearch}
+          onClick={() => navigate('/dashboard/search', { state: searchState ?? undefined })}
+        >
+          ← Back to Search Results
+        </button>
+      )}
 
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className={styles.pageHeader}>

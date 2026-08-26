@@ -126,6 +126,16 @@ public class PurchaseOrderSearchService {
         return predicates;
     }
 
+    /** Returns distinct non-null supplier names for the given user, sorted alphabetically. */
+    public List<String> distinctSuppliers(Long userId) {
+        return em.createQuery(
+                "SELECT DISTINCT po.supplier FROM PurchaseOrder po " +
+                "WHERE po.user.id = :uid AND po.supplier IS NOT NULL AND po.supplier <> '' " +
+                "ORDER BY po.supplier", String.class)
+                .setParameter("uid", userId)
+                .getResultList();
+    }
+
     private String buildDescription(SearchQuery q) {
         List<String> parts = new ArrayList<>();
         if (q.poNumber() != null)       parts.add("PO number contains \"" + q.poNumber() + "\"");
@@ -150,11 +160,14 @@ public class PurchaseOrderSearchService {
                   )).toList()
                 : List.of();
 
+        String status = po.getDocument() != null && po.getDocument().getStatus() != null
+                ? po.getDocument().getStatus().name() : null;
+
         return new PurchaseOrderResponse(
                 po.getId(), po.getUser().getId(), po.getDocument().getId(),
                 po.getPoNumber(), po.getSupplier(), po.getOrderDate(), po.getDeliveryDate(),
                 po.getPaymentTerms(), po.getCurrency(), po.getSubtotal(), po.getTax(),
-                po.getTotal(), po.getCreatedAt(), items);
+                po.getTotal(), po.getCreatedAt(), items, status);
     }
 }
 

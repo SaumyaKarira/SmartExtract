@@ -366,3 +366,57 @@
   line-height: 1.4;
 }
 
+/* Loading state */
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 32px;
+  gap: 12px;
+}
+
+.loadingSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--blue-100);
+  border-top-color: var(--blue-600);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loadingText { font-size: 14px; color: var(--gray-500); }
+
+/* Error state */
+.errorState {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #dc2626;
+}
+
+/* AI tag & parsed description */
+.aiTag {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: var(--blue-600);
+  border: 1px solid var(--blue-100);
+}
+
+.parsedDesc {
+  font-size: 12px;
+  color: var(--gray-400);
+  margin-bottom: 12px;
+  font-style: italic;
+}
+
+

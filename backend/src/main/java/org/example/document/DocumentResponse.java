@@ -14,6 +14,7 @@ public record DocumentResponse(
         LocalDateTime uploadedAt,
         String extractedText,
         ExtractedPurchaseOrder extractedPurchaseOrder,
-        boolean duplicate
+        boolean duplicate,
+        boolean retryable,
+        String errorMessage
 ) {}
-

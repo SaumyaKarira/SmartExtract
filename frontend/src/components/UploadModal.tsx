@@ -8,6 +8,10 @@ interface Props {
   onClose: () => void;
   /** Called when upload + AI extraction is done. poId is null on FAILED status. */
   onSuccess?: (poId: number | null, status: string, extractedText: string | null, fileName: string) => void;
+  /** If provided, the modal opens directly in retry mode for this document */
+  retryDocumentId?: number;
+  /** Pre-selected file for retry (may be undefined if user revisited the page) */
+  retryFile?: File;
 }
 
 interface UploadApiResponse {
@@ -17,28 +21,39 @@ interface UploadApiResponse {
   status: string;
   extractedText: string | null;
   duplicate: boolean;
+  retryable: boolean;
+  errorMessage: string | null;
 }
 
-type UploadState = 'idle' | 'uploading' | 'done_failed' | 'done_duplicate' | 'error';
+type UploadState = 'idle' | 'uploading' | 'done_failed' | 'done_failed_retryable' | 'done_duplicate' | 'error';
 
-export default function UploadModal({ open, onClose, onSuccess }: Props) {
+export default function UploadModal({ open, onClose, onSuccess, retryDocumentId, retryFile }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(retryFile ?? null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [uploadState, setUploadState] = useState<UploadState>('idle');
-  const [failedResult, setFailedResult] = useState<{ fileName: string; extractedText: string | null } | null>(null);
+  const [failedResult, setFailedResult] = useState<{
+    documentId: number;
+    fileName: string;
+    extractedText: string | null;
+    retryable: boolean;
+    errorMessage: string | null;
+  } | null>(null);
   const [duplicateResult, setDuplicateResult] = useState<{ fileName: string; poId: number } | null>(null);
 
   if (!open) return null;
+
+  const isRetryMode = retryDocumentId != null;
+  const noFileForRetry = isRetryMode && !retryFile;
 
   const validate = (f: File) => {
     if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
       setError('Only PDF files are accepted.');
       return false;
     }
-    if (f.size > 20 * 1024 * 1024) {
-      setError('File too large. Maximum size is 20 MB.');
+    if (f.size > 10 * 1024 * 1024) {
+      setError('File is too large. The maximum allowed size is 10 MB.');
       return false;
     }
     setError('');
@@ -66,25 +81,54 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const result = await api.postForm<UploadApiResponse>('/api/documents/upload', formData);
+
+      let result: UploadApiResponse;
+      if (isRetryMode && retryDocumentId != null) {
+        result = await api.postForm<UploadApiResponse>(`/api/documents/${retryDocumentId}/retry`, formData);
+      } else {
+        result = await api.postForm<UploadApiResponse>('/api/documents/upload', formData);
+      }
 
       if (result.duplicate && result.purchaseOrderId) {
         setDuplicateResult({ fileName: result.fileName, poId: result.purchaseOrderId });
         setUploadState('done_duplicate');
       } else if (result.status === 'FAILED' || !result.purchaseOrderId) {
-        // Show FAILED state in modal
-        setFailedResult({ fileName: result.fileName, extractedText: result.extractedText });
-        setUploadState('done_failed');
+        if (result.retryable) {
+          setFailedResult({
+            documentId: result.id,
+            fileName: result.fileName,
+            extractedText: result.extractedText,
+            retryable: true,
+            errorMessage: result.errorMessage,
+          });
+          setUploadState('done_failed_retryable');
+        } else {
+          setFailedResult({
+            documentId: result.id,
+            fileName: result.fileName,
+            extractedText: result.extractedText,
+            retryable: false,
+            errorMessage: result.errorMessage,
+          });
+          setUploadState('done_failed');
+        }
       } else {
-        // Navigate away — let parent handle it
         if (onSuccess) {
           onSuccess(result.purchaseOrderId, result.status, result.extractedText, result.fileName);
         }
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Upload failed.');
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
       setUploadState('error');
     }
+  };
+
+  const handleRetry = () => {
+    if (!failedResult) return;
+    // Reset to idle with the same file so user can re-submit
+    setUploadState('idle');
+    setError('');
+    // Keep the file in state so user can immediately retry
   };
 
   const handleClose = () => {
@@ -113,15 +157,32 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
           <div className={styles.headerLeft}>
             <div className={styles.headerIcon}>📤</div>
             <div>
-              <h2 className={styles.title}>Upload Purchase Order</h2>
-              <p className={styles.subtitle}>Supported format: PDF  Max 20 MB</p>
+              <h2 className={styles.title}>{isRetryMode ? 'Retry Processing' : 'Upload Purchase Order'}</h2>
+              <p className={styles.subtitle}>Supported format: PDF · Max 10 MB · Max 100 pages</p>
             </div>
           </div>
           <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">✕</button>
         </div>
 
-        {/* DUPLICATE state */}
-        {uploadState === 'done_duplicate' && duplicateResult ? (
+        {/* No file available for retry */}
+        {noFileForRetry ? (
+          <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
+                          background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '0.85rem 1rem' }}>
+              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>⚠️</span>
+              <div>
+                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#92400e' }}>Document No Longer Available</p>
+                <p style={{ fontSize: '0.82rem', color: '#78350f', margin: 0 }}>
+                  This document is no longer available for retry. Please upload the PDF again.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className={styles.cancelBtn} onClick={handleClose}>Close</button>
+            </div>
+          </div>
+        ) : /* DUPLICATE state */
+        uploadState === 'done_duplicate' && duplicateResult ? (
           <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
                           background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: '8px', padding: '0.85rem 1rem' }}>
@@ -143,22 +204,43 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
               </button>
             </div>
           </div>
-        ) : /* FAILED state */
+        ) : /* FAILED (permanent) state */
         uploadState === 'done_failed' && failedResult ? (
           <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
                           background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.85rem 1rem' }}>
               <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>❌</span>
               <div>
-                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#dc2626' }}>Extraction Failed</p>
+                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#dc2626' }}>Processing Failed</p>
                 <p style={{ fontSize: '0.82rem', color: '#7f1d1d', margin: 0 }}>
-                  AI could not extract structured data from <strong>{failedResult.fileName}</strong>.
-                  The document may be a scanned image or an unrecognised format.
+                  {failedResult.errorMessage ??
+                    `AI could not extract structured data from ${failedResult.fileName}. The document may be a scanned image or an unsupported format.`}
                 </p>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button className={styles.processBtn} onClick={handleClose}>Close</button>
+            </div>
+          </div>
+        ) : /* FAILED (retryable) state */
+        uploadState === 'done_failed_retryable' && failedResult ? (
+          <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
+                          background: '#fff7ed', border: '1px solid #fdba74', borderRadius: '8px', padding: '0.85rem 1rem' }}>
+              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>⚠️</span>
+              <div>
+                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#c2410c' }}>Temporary Processing Issue</p>
+                <p style={{ fontSize: '0.82rem', color: '#7c2d12', margin: 0 }}>
+                  {failedResult.errorMessage ??
+                    `Processing of ${failedResult.fileName} failed due to a temporary issue. You can retry.`}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button className={styles.cancelBtn} onClick={handleClose}>Close</button>
+              <button className={styles.processBtn} onClick={handleRetry}>
+                Retry →
+              </button>
             </div>
           </div>
         ) : (
@@ -234,7 +316,7 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
                   <span>Uploading…</span>
                 ) : (
                   <>
-                    <span>Process Document</span>
+                    <span>{isRetryMode ? 'Retry Processing' : 'Process Document'}</span>
                     <span className={styles.processBtnArrow}>→</span>
                   </>
                 )}

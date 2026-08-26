@@ -32,5 +32,14 @@ public class DocumentController {
         DocumentResponse response = documentService.upload(file, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
-}
 
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<DocumentResponse> retry(
+            @PathVariable("id") Long documentId,
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        DocumentResponse response = documentService.retry(documentId, userId, file);
+        return ResponseEntity.ok(response);
+    }
+}

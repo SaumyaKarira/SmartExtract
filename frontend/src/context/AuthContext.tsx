@@ -1,6 +1,7 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { api } from '../api/client';
+import { useNavigate } from 'react-router-dom';
+import { api, SESSION_EXPIRED_EVENT } from '../api/client';
 
 interface User {
   email: string;
@@ -24,12 +25,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(USER_KEY);
     return stored ? JSON.parse(stored) : null;
   });
+  const navigate = useNavigate();
 
   const persist = (u: User, token: string) => {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(u));
     setUser(u);
   };
+
+  const logout = useCallback(() => {
+    setUser(null);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }, []);
+
+  // Listen for session-expired events dispatched by the API client on 401
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      logout();
+      navigate('/login', {
+        replace: true,
+        state: { sessionExpired: true },
+      });
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, [logout, navigate]);
 
   const login = async (email: string, password: string) => {
     const { token } = await api.post<{ token: string }>('/api/auth/login', { email, password });
@@ -45,12 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       { name, email, password }
     );
     persist({ email: result.email, name: result.name }, result.token);
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
   };
 
   return (

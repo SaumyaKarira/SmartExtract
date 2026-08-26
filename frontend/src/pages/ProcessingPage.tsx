@@ -18,7 +18,9 @@ type StepStatus = 'done' | 'active' | 'pending';
 export default function ProcessingPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const fileName = (location.state as { fileName?: string })?.fileName ?? 'document.pdf';
+  const state = location.state as { fileName?: string; poId?: number } | null;
+  const fileName = state?.fileName ?? 'document.pdf';
+  const poId = state?.poId;
 
   const [currentStep, setCurrentStep] = useState(0); // index of currently-active step
 
@@ -35,12 +37,16 @@ export default function ProcessingPage() {
 
     // Navigate to PO detail after last step
     const navTimer = setTimeout(() => {
-      navigate('/dashboard/po/PO-2026-0042', { replace: true });
+      if (poId) {
+        navigate(`/dashboard/po/${poId}`, { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }, STEP_DELAYS[STEP_DELAYS.length - 1] + 600);
 
     timers.push(navTimer);
     return () => timers.forEach(clearTimeout);
-  }, [navigate]);
+  }, [navigate, poId]);
 
   const getStatus = (idx: number): StepStatus => {
     if (idx < currentStep) return 'done';

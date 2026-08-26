@@ -36,6 +36,12 @@ public class Document {
     @Column(name = "file_hash", length = 64)
     private String fileHash;
 
+    @Column(name = "retryable")
+    private boolean retryable = false;
+
+    @Column(name = "error_message", length = 500)
+    private String errorMessage;
+
     @OneToOne(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true)
     private PurchaseOrder purchaseOrder;
 }

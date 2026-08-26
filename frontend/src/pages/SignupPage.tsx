@@ -38,7 +38,8 @@ export default function SignupPage() {
       await register(name.trim(), email.trim(), password);
       navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Registration failed.');
+      const msg = err instanceof Error ? err.message : '';
+      setError(msg || 'We couldn\'t connect to the server. Please try again.');
     } finally {
       setLoading(false);
     }

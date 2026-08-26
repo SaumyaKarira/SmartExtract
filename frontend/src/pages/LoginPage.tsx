@@ -9,6 +9,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const justRegistered = (location.state as { registered?: boolean } | null)?.registered === true;
+  const sessionExpired = (location.state as { sessionExpired?: boolean } | null)?.sessionExpired === true;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,7 +39,10 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed.');
+      const msg = err instanceof Error ? err.message : '';
+      // Normalize: backend returns "Incorrect email or password." already — pass through
+      // For network/server failures the client already returns a friendly message
+      setError(msg || 'We couldn\'t connect to the server. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -86,6 +90,13 @@ export default function LoginPage() {
             <div className={styles.errorBanner} role="status" style={{ background: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}>
               <span className={styles.errorIcon}>✓</span>
               Account created! Please sign in.
+            </div>
+          )}
+
+          {sessionExpired && !error && (
+            <div className={styles.errorBanner} role="alert">
+              <span className={styles.errorIcon}>⚠</span>
+              Your session has expired. Please sign in again.
             </div>
           )}
 

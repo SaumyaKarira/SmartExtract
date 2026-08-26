@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api/client';
 import styles from './SettingsPage.module.css';
 
 type Section = 'profile' | 'account' | 'preferences';
@@ -27,23 +28,34 @@ function SectionNav({ active, onChange }: { active: Section; onChange: (s: Secti
   );
 }
 
-function SaveToast({ show }: { show: boolean }) {
+function Toast({ show, message, success }: { show: boolean; message: string; success: boolean }) {
   return (
-    <div className={`${styles.toast} ${show ? styles.toastVisible : ''}`}>
-      ✓ Changes saved
+    <div className={`${styles.toast} ${show ? styles.toastVisible : ''}`}
+         style={{ background: success ? '#166534' : '#991b1b' }}>
+      {success ? '✓' : '⚠'} {message}
     </div>
   );
 }
 
 export default function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [section, setSection] = useState<Section>('profile');
+
+  // Toast
+  const [toast, setToast] = useState<{ show: boolean; message: string; success: boolean }>({
+    show: false, message: '', success: true,
+  });
+  const showToast = (message: string, success = true) => {
+    setToast({ show: true, message, success });
+    setTimeout(() => setToast(t => ({ ...t, show: false })), 2800);
+  };
 
   // Profile state
   const [name, setName] = useState(user?.name ?? '');
   const [editingProfile, setEditingProfile] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
   // Password state
   const [showPassForm, setShowPassForm] = useState(false);
@@ -51,10 +63,11 @@ export default function SettingsPage() {
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [passError, setPassError] = useState('');
+  const [passLoading, setPassLoading] = useState(false);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
 
-  // Preferences
+  // Preferences (UI-only — no backend yet)
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [processingNotifs, setProcessingNotifs] = useState(true);
 
@@ -65,24 +78,40 @@ export default function SettingsPage() {
     .toUpperCase()
     .slice(0, 2) || 'U';
 
-  const showToast = () => {
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 2400);
+  const handleSaveProfile = async () => {
+    setProfileError('');
+    if (!name.trim()) { setProfileError('Name cannot be empty.'); return; }
+    if (name.trim().length > 100) { setProfileError('Name must be 100 characters or fewer.'); return; }
+    setProfileLoading(true);
+    try {
+      const result = await api.patch<{ id: number; name: string; email: string }>(
+        '/api/user/profile', { name: name.trim() });
+      updateUser({ name: result.name });
+      setEditingProfile(false);
+      showToast('Profile updated successfully.');
+    } catch (err: unknown) {
+      setProfileError(err instanceof Error ? err.message : 'Failed to update profile.');
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
-  const handleSaveProfile = () => {
-    setEditingProfile(false);
-    showToast();
-  };
-
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     setPassError('');
-    if (!currentPass) return setPassError('Current password is required.');
-    if (newPass.length < 6) return setPassError('New password must be at least 6 characters.');
-    if (newPass !== confirmPass) return setPassError('Passwords do not match.');
-    setCurrentPass(''); setNewPass(''); setConfirmPass('');
-    setShowPassForm(false);
-    showToast();
+    if (!currentPass) { setPassError('Current password is required.'); return; }
+    if (newPass.length < 6) { setPassError('New password must be at least 6 characters.'); return; }
+    if (newPass !== confirmPass) { setPassError('Passwords do not match.'); return; }
+    setPassLoading(true);
+    try {
+      await api.post('/api/user/change-password', { currentPassword: currentPass, newPassword: newPass });
+      setCurrentPass(''); setNewPass(''); setConfirmPass('');
+      setShowPassForm(false);
+      showToast('Password changed successfully.');
+    } catch (err: unknown) {
+      setPassError(err instanceof Error ? err.message : 'Failed to change password.');
+    } finally {
+      setPassLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -90,11 +119,9 @@ export default function SettingsPage() {
     navigate('/login', { replace: true });
   };
 
-  const handleSavePrefs = () => showToast();
-
   return (
     <div className={styles.page}>
-      <SaveToast show={toastVisible} />
+      <Toast show={toast.show} message={toast.message} success={toast.success} />
 
       <div className={styles.pageHeader}>
         <h1 className={styles.heading}>Settings</h1>
@@ -133,19 +160,23 @@ export default function SettingsPage() {
                     <span className={styles.readLabel}>Email address</span>
                     <span className={styles.readValue}>{user?.email}</span>
                   </div>
-                  <button className={styles.primaryBtn} onClick={() => setEditingProfile(true)}>
+                  <button className={styles.primaryBtn} onClick={() => { setEditingProfile(true); setProfileError(''); }}>
                     Edit Profile
                   </button>
                 </div>
               ) : (
                 <div className={styles.fieldGroup}>
+                  {profileError && (
+                    <div className={styles.inlineError}>⚠ {profileError}</div>
+                  )}
                   <div className={styles.formField}>
                     <label className={styles.label}>Full name</label>
                     <input
-                      className={styles.input}
+                      className={`${styles.input} ${profileError ? styles.inputError : ''}`}
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => { setName(e.target.value); setProfileError(''); }}
                       placeholder="Your full name"
+                      disabled={profileLoading}
                     />
                   </div>
                   <div className={styles.formField}>
@@ -155,14 +186,15 @@ export default function SettingsPage() {
                       value={user?.email}
                       disabled
                     />
-                    <p className={styles.fieldHint}>Email cannot be changed in demo mode.</p>
+                    <p className={styles.fieldHint}>Email address cannot be changed.</p>
                   </div>
                   <div className={styles.btnRow}>
-                    <button className={styles.ghostBtn} onClick={() => { setEditingProfile(false); setName(user?.name ?? ''); }}>
+                    <button className={styles.ghostBtn} disabled={profileLoading}
+                      onClick={() => { setEditingProfile(false); setName(user?.name ?? ''); setProfileError(''); }}>
                       Cancel
                     </button>
-                    <button className={styles.primaryBtn} onClick={handleSaveProfile}>
-                      Save Changes
+                    <button className={styles.primaryBtn} onClick={handleSaveProfile} disabled={profileLoading}>
+                      {profileLoading ? 'Saving…' : 'Save Changes'}
                     </button>
                   </div>
                 </div>
@@ -178,7 +210,6 @@ export default function SettingsPage() {
                 <p className={styles.cardDesc}>Manage your password and account access.</p>
               </div>
 
-              {/* Change password */}
               <div className={styles.accountSection}>
                 <div className={styles.accountSectionHeader}>
                   <div>
@@ -186,7 +217,7 @@ export default function SettingsPage() {
                     <p className={styles.accountSectionDesc}>Update your login password.</p>
                   </div>
                   {!showPassForm && (
-                    <button className={styles.outlineBtn} onClick={() => setShowPassForm(true)}>
+                    <button className={styles.outlineBtn} onClick={() => { setShowPassForm(true); setPassError(''); }}>
                       Change Password
                     </button>
                   )}
@@ -202,10 +233,12 @@ export default function SettingsPage() {
                           className={styles.input}
                           type={showCurrent ? 'text' : 'password'}
                           value={currentPass}
-                          onChange={(e) => setCurrentPass(e.target.value)}
+                          onChange={(e) => { setCurrentPass(e.target.value); setPassError(''); }}
                           placeholder="••••••••"
+                          disabled={passLoading}
                         />
-                        <button type="button" className={styles.passToggle} onClick={() => setShowCurrent(v => !v)}>
+                        <button type="button" className={styles.passToggle}
+                          onClick={() => setShowCurrent(v => !v)}>
                           {showCurrent ? '🙈' : '👁'}
                         </button>
                       </div>
@@ -217,10 +250,12 @@ export default function SettingsPage() {
                           className={styles.input}
                           type={showNew ? 'text' : 'password'}
                           value={newPass}
-                          onChange={(e) => setNewPass(e.target.value)}
+                          onChange={(e) => { setNewPass(e.target.value); setPassError(''); }}
                           placeholder="Min. 6 characters"
+                          disabled={passLoading}
                         />
-                        <button type="button" className={styles.passToggle} onClick={() => setShowNew(v => !v)}>
+                        <button type="button" className={styles.passToggle}
+                          onClick={() => setShowNew(v => !v)}>
                           {showNew ? '🙈' : '👁'}
                         </button>
                       </div>
@@ -231,16 +266,18 @@ export default function SettingsPage() {
                         className={styles.input}
                         type="password"
                         value={confirmPass}
-                        onChange={(e) => setConfirmPass(e.target.value)}
+                        onChange={(e) => { setConfirmPass(e.target.value); setPassError(''); }}
                         placeholder="Re-enter new password"
+                        disabled={passLoading}
                       />
                     </div>
                     <div className={styles.btnRow}>
-                      <button className={styles.ghostBtn} onClick={() => { setShowPassForm(false); setPassError(''); setCurrentPass(''); setNewPass(''); setConfirmPass(''); }}>
+                      <button className={styles.ghostBtn} disabled={passLoading}
+                        onClick={() => { setShowPassForm(false); setPassError(''); setCurrentPass(''); setNewPass(''); setConfirmPass(''); }}>
                         Cancel
                       </button>
-                      <button className={styles.primaryBtn} onClick={handleChangePassword}>
-                        Update Password
+                      <button className={styles.primaryBtn} onClick={handleChangePassword} disabled={passLoading}>
+                        {passLoading ? 'Updating…' : 'Update Password'}
                       </button>
                     </div>
                   </div>
@@ -249,7 +286,6 @@ export default function SettingsPage() {
 
               <div className={styles.divider} />
 
-              {/* Logout */}
               <div className={styles.accountSection}>
                 <div className={styles.accountSectionHeader}>
                   <div>
@@ -310,7 +346,7 @@ export default function SettingsPage() {
 
               <div className={styles.divider} />
               <div className={styles.prefActions}>
-                <button className={styles.primaryBtn} onClick={handleSavePrefs}>
+                <button className={styles.primaryBtn} onClick={() => showToast('Preferences saved.')}>
                   Save Preferences
                 </button>
               </div>
@@ -321,4 +357,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

@@ -55,8 +55,25 @@ export const api = {
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
 
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+
   postForm: <T>(path: string, formData: FormData) =>
     request<T>(path, { method: 'POST', body: formData }),
 
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
+
+  getBlob: (path: string) => {
+    const token = getToken();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    return fetch(`${BASE_URL}${path}`, { method: 'GET', headers }).then(async res => {
+      if (!res.ok) {
+        let message = `Request failed: ${res.status}`;
+        try { const b = await res.json(); message = b.message ?? message; } catch { /* ignore */ }
+        if (res.status === 401 && token) window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+        throw new Error(message);
+      }
+      return res.blob();
+    });
+  },
 };

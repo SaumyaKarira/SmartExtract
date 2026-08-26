@@ -41,7 +41,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/documents/**",
                                          "/api/purchase-orders/**",
                                          "/api/search/**",
-                                         "/api/dashboard/**").authenticated()
+                                         "/api/dashboard/**",
+                                         "/api/user/**",
+                                         "/api/export/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import styles from './PurchaseOrdersPage.module.css';
@@ -54,6 +54,41 @@ export default function PurchaseOrdersPage() {
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<'orderDate' | 'total' | 'poNumber'>('orderDate');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  // Close export menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleExport = async (format: 'csv' | 'xlsx' | 'pdf') => {
+    setExportMenuOpen(false);
+    setExportLoading(true);
+    try {
+      const blob = await api.getBlob(`/api/export/purchase-orders?format=${format}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `purchase-orders-${date}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Export failed.');
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   useEffect(() => {
     api.get<PurchaseOrder[]>('/api/purchase-orders')
@@ -114,7 +149,58 @@ export default function PurchaseOrdersPage() {
           <h1 className={styles.heading}>Purchase Orders</h1>
           <p className={styles.subheading}>Your complete library of uploaded and processed purchase orders.</p>
         </div>
-        <div className={styles.countBadge}>{pos.length} PO{pos.length !== 1 ? 's' : ''}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div className={styles.countBadge}>{pos.length} PO{pos.length !== 1 ? 's' : ''}</div>
+          {pos.length > 0 && (
+            <div ref={exportRef} style={{ position: 'relative' }}>
+              <button
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  padding: '0.45rem 1rem', borderRadius: '8px',
+                  border: '1.5px solid #d1d5db', background: 'white',
+                  color: '#374151', fontWeight: 600, fontSize: '0.875rem',
+                  cursor: exportLoading ? 'not-allowed' : 'pointer',
+                  opacity: exportLoading ? 0.6 : 1,
+                }}
+                onClick={() => !exportLoading && setExportMenuOpen(v => !v)}
+                aria-label="Export purchase orders"
+              >
+                <span>⬇</span>
+                {exportLoading ? 'Exporting…' : 'Export'}
+                <span style={{ fontSize: '0.7rem' }}>▾</span>
+              </button>
+              {exportMenuOpen && (
+                <div style={{
+                  position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 50,
+                  background: 'white', border: '1px solid #e5e7eb',
+                  borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  minWidth: '160px', overflow: 'hidden',
+                }}>
+                  {([
+                    { fmt: 'csv',  label: '📄 CSV (.csv)',    desc: 'Comma-separated values' },
+                    { fmt: 'xlsx', label: '📊 Excel (.xlsx)', desc: 'Microsoft Excel workbook' },
+                    { fmt: 'pdf',  label: '📑 PDF (.pdf)',    desc: 'Printable report' },
+                  ] as const).map(({ fmt, label, desc }) => (
+                    <button
+                      key={fmt}
+                      onClick={() => handleExport(fmt)}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left',
+                        padding: '0.65rem 1rem', border: 'none', background: 'none',
+                        cursor: 'pointer', borderBottom: '1px solid #f3f4f6',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{label}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '1px' }}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className={styles.controls}>

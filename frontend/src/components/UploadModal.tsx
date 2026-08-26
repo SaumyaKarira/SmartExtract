@@ -16,9 +16,10 @@ interface UploadApiResponse {
   fileName: string;
   status: string;
   extractedText: string | null;
+  duplicate: boolean;
 }
 
-type UploadState = 'idle' | 'uploading' | 'done_failed' | 'error';
+type UploadState = 'idle' | 'uploading' | 'done_failed' | 'done_duplicate' | 'error';
 
 export default function UploadModal({ open, onClose, onSuccess }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +28,7 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
   const [error, setError] = useState('');
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [failedResult, setFailedResult] = useState<{ fileName: string; extractedText: string | null } | null>(null);
+  const [duplicateResult, setDuplicateResult] = useState<{ fileName: string; poId: number } | null>(null);
 
   if (!open) return null;
 
@@ -66,7 +68,10 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
       formData.append('file', file);
       const result = await api.postForm<UploadApiResponse>('/api/documents/upload', formData);
 
-      if (result.status === 'FAILED' || !result.purchaseOrderId) {
+      if (result.duplicate && result.purchaseOrderId) {
+        setDuplicateResult({ fileName: result.fileName, poId: result.purchaseOrderId });
+        setUploadState('done_duplicate');
+      } else if (result.status === 'FAILED' || !result.purchaseOrderId) {
         // Show FAILED state in modal
         setFailedResult({ fileName: result.fileName, extractedText: result.extractedText });
         setUploadState('done_failed');
@@ -87,6 +92,7 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
     setError('');
     setUploadState('idle');
     setFailedResult(null);
+    setDuplicateResult(null);
     onClose();
   };
 
@@ -114,8 +120,31 @@ export default function UploadModal({ open, onClose, onSuccess }: Props) {
           <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">✕</button>
         </div>
 
-        {/* FAILED state */}
-        {uploadState === 'done_failed' && failedResult ? (
+        {/* DUPLICATE state */}
+        {uploadState === 'done_duplicate' && duplicateResult ? (
+          <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
+                          background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: '8px', padding: '0.85rem 1rem' }}>
+              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>📄</span>
+              <div>
+                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#1d4ed8' }}>Document Already Uploaded</p>
+                <p style={{ fontSize: '0.82rem', color: '#1e3a8a', margin: 0 }}>
+                  <strong>{duplicateResult.fileName}</strong> has already been uploaded and processed.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button className={styles.cancelBtn} onClick={handleClose}>Close</button>
+              <button className={styles.processBtn} onClick={() => {
+                handleClose();
+                if (onSuccess) onSuccess(duplicateResult.poId, 'COMPLETED', null, duplicateResult.fileName);
+              }}>
+                View Existing Purchase Order →
+              </button>
+            </div>
+          </div>
+        ) : /* FAILED state */
+        uploadState === 'done_failed' && failedResult ? (
           <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
                           background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.85rem 1rem' }}>

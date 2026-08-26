@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import styles from './PODetailPage.module.css';
 
@@ -47,7 +47,6 @@ function InfoField({ label, value }: { label: string; value: string }) {
 }
 
 export default function PODetailPage() {
-  const navigate = useNavigate();
   const { poId } = useParams();
   const location = useLocation();
 
@@ -64,8 +63,6 @@ export default function PODetailPage() {
       .then(data => { setPo(data); setLoading(false); })
       .catch(err => { setError(err instanceof Error ? err.message : 'Failed to load purchase order.'); setLoading(false); });
   }, [poId]);
-
-  const handleUploadAnother = () => navigate('/dashboard', { state: { openUpload: true } });
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) return (
@@ -84,9 +81,6 @@ export default function PODetailPage() {
         <span className={styles.errorIcon}>⚠️</span>
         <h2 className={styles.errorTitle}>Unable to load purchase order</h2>
         <p className={styles.errorMsg}>{error || 'Purchase order not found.'}</p>
-        <button className={styles.uploadAnotherBtn} onClick={handleUploadAnother}>
-          + Upload Another Purchase Order
-        </button>
       </div>
     </div>
   );
@@ -105,9 +99,6 @@ export default function PODetailPage() {
           <span className={`${styles.statusBadge} ${styles.statusBadgeGreen}`}>
             ✓ Completed
           </span>
-          <button className={styles.uploadAnotherBtn} onClick={handleUploadAnother}>
-            + Upload Another Purchase Order
-          </button>
         </div>
       </div>
 
@@ -215,12 +206,6 @@ export default function PODetailPage() {
         </div>
       )}
 
-      {/* ── Bottom Actions ──────────────────────────────────────────────── */}
-      <div className={styles.bottomActions}>
-        <button className={styles.uploadAnotherBtn} onClick={handleUploadAnother}>
-          + Upload Another Purchase Order
-        </button>
-      </div>
 
       {/* Info banner */}
       <div className={styles.infoBanner}>

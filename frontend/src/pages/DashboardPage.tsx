@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import UploadModal from '../components/UploadModal';
+import { api } from '../api/client';
 import styles from './DashboardPage.module.css';
+
+interface DashboardStats {
+  total: number;
+  completed: number;
+  processing: number;
+  failed: number;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -11,14 +19,17 @@ export default function DashboardPage() {
   const [uploadOpen, setUploadOpen] = useState(
     location.state?.openUpload === true
   );
+  const [stats, setStats] = useState<DashboardStats>({ total: 0, completed: 0, processing: 0, failed: 0 });
 
   const firstName = user?.name.split(' ')[0] ?? 'there';
 
-  // Clear the openUpload state so browser back doesn't re-open it
   useEffect(() => {
     if (location.state?.openUpload) {
       window.history.replaceState({}, '');
     }
+    api.get<DashboardStats>('/api/dashboard/stats')
+      .then(setStats)
+      .catch(() => {}); // silently keep zeros on error
   }, []);
 
   const handleUploadSuccess = (
@@ -45,10 +56,10 @@ export default function DashboardPage() {
       {/* Stats row */}
       <div className={styles.statsGrid}>
         {[
-          { label: 'Total POs', value: '0', icon: '📄', color: '#dbeafe', iconColor: '#2563eb' },
-          { label: 'Processed', value: '0', icon: '✅', color: '#dcfce7', iconColor: '#16a34a' },
-          { label: 'Pending', value: '0', icon: '⏳', color: '#fef9c3', iconColor: '#ca8a04' },
-          { label: 'Errors', value: '0', icon: '⚠', color: '#fee2e2', iconColor: '#dc2626' },
+          { label: 'Total POs', value: stats.total, icon: '📄', color: '#dbeafe', iconColor: '#2563eb' },
+          { label: 'Completed', value: stats.completed, icon: '✅', color: '#dcfce7', iconColor: '#16a34a' },
+          { label: 'Pending', value: stats.processing, icon: '⏳', color: '#fef9c3', iconColor: '#ca8a04' },
+          { label: 'Errors', value: stats.failed, icon: '⚠', color: '#fee2e2', iconColor: '#dc2626' },
         ].map((stat) => (
           <div key={stat.label} className={styles.statCard}>
             <div className={styles.statIcon} style={{ background: stat.color, color: stat.iconColor }}>

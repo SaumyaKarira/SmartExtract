@@ -1,124 +1,225 @@
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { MOCK_POS } from '../data/mockPOs';
+import { api } from '../api/client';
 import styles from './PODetailPage.module.css';
 
-const fmt = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+interface POItem {
+  id: number;
+  description: string | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  totalPrice: number | null;
+}
+
+interface PurchaseOrderDetail {
+  id: number;
+  poNumber: string | null;
+  supplier: string | null;
+  orderDate: string | null;
+  deliveryDate: string | null;
+  paymentTerms: string | null;
+  currency: string | null;
+  subtotal: number | null;
+  tax: number | null;
+  total: number | null;
+  createdAt: string;
+  items: POItem[];
+}
+
+const fmtCurrency = (val: number | null) =>
+  val != null
+    ? `₹\u00A0${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : '—';
+
+const fmtDate = (val: string | null) => {
+  if (!val) return '—';
+  try { return new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  catch { return val; }
+};
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.infoField}>
+      <span className={styles.infoLabel}>{label}</span>
+      <span className={styles.infoValue}>{value}</span>
+    </div>
+  );
+}
 
 export default function PODetailPage() {
   const navigate = useNavigate();
   const { poId } = useParams();
   const location = useLocation();
 
-  // Find PO from mock data by ID; fall back to first PO (for processing flow)
-  const po = MOCK_POS.find((p) => p.poNumber === poId) ?? MOCK_POS[0];
+  const [po, setPo] = useState<PurchaseOrderDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Determine where "back" goes depending on how we arrived
-  const fromPOList = location.state?.from === 'po-list';
-  const handleBack = () =>
-    fromPOList ? navigate('/dashboard/purchase-orders') : navigate('/dashboard');
+  // Source text passed via navigation state (from upload flow)
+  const extractedText: string | null = location.state?.extractedText ?? null;
+  const fromUpload: boolean = location.state?.fromUpload === true;
 
-  const statusClass =
-    po.status === 'Processed' ? styles.statusBadgeGreen
-    : po.status === 'Processing' ? styles.statusBadgeBlue
-    : styles.statusBadgeRed;
+  useEffect(() => {
+    api.get<PurchaseOrderDetail>(`/api/purchase-orders/${poId}`)
+      .then(data => { setPo(data); setLoading(false); })
+      .catch(err => { setError(err instanceof Error ? err.message : 'Failed to load purchase order.'); setLoading(false); });
+  }, [poId]);
+
+  const handleUploadAnother = () => navigate('/dashboard', { state: { openUpload: true } });
+
+  // ── Loading ──────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div className={styles.page}>
+      <div className={styles.loadingBox}>
+        <div className={styles.spinner} />
+        <p className={styles.loadingText}>Loading purchase order…</p>
+      </div>
+    </div>
+  );
+
+  // ── Error ────────────────────────────────────────────────────────────────
+  if (error || !po) return (
+    <div className={styles.page}>
+      <div className={styles.errorBox}>
+        <span className={styles.errorIcon}>⚠️</span>
+        <h2 className={styles.errorTitle}>Unable to load purchase order</h2>
+        <p className={styles.errorMsg}>{error || 'Purchase order not found.'}</p>
+        <button className={styles.uploadAnotherBtn} onClick={handleUploadAnother}>
+          + Upload Another Purchase Order
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className={styles.page}>
-      {/* Page header */}
+
+      {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className={styles.pageHeader}>
-        <button className={styles.backBtn} onClick={handleBack}>
-          ← {fromPOList ? 'Back to Purchase Orders' : 'Back to Dashboard'}
-        </button>
+        <div className={styles.pageHeaderLeft}>
+          <p className={styles.pageTitle}>Purchase Order Details</p>
+          <h1 className={styles.poHeading}>{po.poNumber ?? `PO #${po.id}`}</h1>
+          <p className={styles.vendorName}>{po.supplier ?? 'Unknown Vendor'}</p>
+        </div>
         <div className={styles.pageHeaderRight}>
-          <span className={`${styles.statusBadge} ${statusClass}`}>
-            {po.status === 'Processed' && '✓ '}
-            {po.status === 'Processing' && '⟳ '}
-            {po.status === 'Error' && '✕ '}
-            {po.status}
+          <span className={`${styles.statusBadge} ${styles.statusBadgeGreen}`}>
+            ✓ Completed
           </span>
-          <button className={styles.viewOriginalBtn} disabled title="Coming soon">
-            🔗 View Original Document
+          <button className={styles.uploadAnotherBtn} onClick={handleUploadAnother}>
+            + Upload Another Purchase Order
           </button>
         </div>
       </div>
 
-      {/* Title row */}
-      <div className={styles.titleRow}>
-        <div>
-          <h1 className={styles.poNumber}>{po.poNumber}</h1>
-          <p className={styles.supplier}>{po.supplier}</p>
-        </div>
-        <div className={styles.totalPill}>{fmt(po.total)}</div>
-      </div>
-
-      {/* Meta grid */}
-      <div className={styles.metaGrid}>
-        {[
-          { label: 'Supplier', value: po.supplier },
-          { label: 'Supplier Address', value: po.supplierAddress },
-          { label: 'Order Date', value: po.orderDate },
-          { label: 'Delivery Date', value: po.deliveryDate },
-          { label: 'Payment Terms', value: po.paymentTerms },
-          { label: 'Currency', value: po.currency },
-        ].map((item) => (
-          <div key={item.label} className={styles.metaItem}>
-            <span className={styles.metaLabel}>{item.label}</span>
-            <span className={styles.metaValue}>{item.value}</span>
+      {/* ── AI Extracted Details ────────────────────────────────────────── */}
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardHeaderLeft}>
+            <span className={styles.cardIcon}>🤖</span>
+            <h2 className={styles.cardTitle}>AI Extracted Details</h2>
           </div>
-        ))}
+          {fromUpload && (
+            <span className={styles.successPill}>✓ AI extraction completed</span>
+          )}
+        </div>
+
+        <div className={styles.infoGrid}>
+          <InfoField label="PO Number" value={po.poNumber ?? '—'} />
+          <InfoField label="Vendor" value={po.supplier ?? '—'} />
+          <InfoField label="PO Date" value={fmtDate(po.orderDate)} />
+          <InfoField label="Payment Terms" value={po.paymentTerms ?? '—'} />
+          <InfoField label="Total Amount" value={fmtCurrency(po.total)} />
+          {po.deliveryDate && <InfoField label="Delivery Date" value={fmtDate(po.deliveryDate)} />}
+          {po.currency && <InfoField label="Currency" value={po.currency} />}
+        </div>
       </div>
 
-      {/* Line items table */}
-      <div className={styles.tableCard}>
-        <div className={styles.tableHeader}>
-          <h2 className={styles.tableTitle}>Line Items</h2>
-          <span className={styles.tableCount}>{po.items.length} items</span>
+      {/* ── Line Items ──────────────────────────────────────────────────── */}
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardHeaderLeft}>
+            <span className={styles.cardIcon}>📋</span>
+            <h2 className={styles.cardTitle}>Line Items</h2>
+          </div>
+          <span className={styles.itemCount}>{po.items.length} item{po.items.length !== 1 ? 's' : ''}</span>
         </div>
-        <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th className={styles.th}>#</th>
-                <th className={`${styles.th} ${styles.thDesc}`}>Description</th>
-                <th className={`${styles.th} ${styles.thNum}`}>Qty</th>
-                <th className={`${styles.th} ${styles.thNum}`}>Unit Price</th>
-                <th className={`${styles.th} ${styles.thNum}`}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {po.items.map((item) => (
-                <tr key={item.id} className={styles.tr}>
-                  <td className={`${styles.td} ${styles.tdIndex}`}>{item.id}</td>
-                  <td className={`${styles.td} ${styles.tdDesc}`}>{item.description}</td>
-                  <td className={`${styles.td} ${styles.tdNum}`}>{item.qty}</td>
-                  <td className={`${styles.td} ${styles.tdNum}`}>{fmt(item.unitPrice)}</td>
-                  <td className={`${styles.td} ${styles.tdNum} ${styles.tdTotal}`}>{fmt(item.total)}</td>
+
+        {po.items.length === 0 ? (
+          <p className={styles.noItems}>No line items were extracted from this document.</p>
+        ) : (
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={styles.th}>#</th>
+                  <th className={`${styles.th} ${styles.thDesc}`}>Description</th>
+                  <th className={`${styles.th} ${styles.thNum}`}>Qty</th>
+                  <th className={`${styles.th} ${styles.thNum}`}>Unit Price</th>
+                  <th className={`${styles.th} ${styles.thNum}`}>Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {po.items.map((item, i) => (
+                  <tr key={item.id} className={styles.tr}>
+                    <td className={`${styles.td} ${styles.tdIndex}`}>{i + 1}</td>
+                    <td className={`${styles.td} ${styles.tdDesc}`}>{item.description ?? '—'}</td>
+                    <td className={`${styles.td} ${styles.tdNum}`}>{item.quantity ?? '—'}</td>
+                    <td className={`${styles.td} ${styles.tdNum}`}>{fmtCurrency(item.unitPrice)}</td>
+                    <td className={`${styles.td} ${styles.tdNum} ${styles.tdTotal}`}>{fmtCurrency(item.totalPrice)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {/* Totals */}
-        <div className={styles.totals}>
-          <div className={styles.totalRow}>
-            <span className={styles.totalLabel}>Subtotal</span>
-            <span className={styles.totalValue}>{fmt(po.subtotal)}</span>
+        {/* Order Summary */}
+        {(po.subtotal != null || po.tax != null || po.total != null) && (
+          <div className={styles.summarySection}>
+            <h3 className={styles.summaryTitle}>Order Summary</h3>
+            <div className={styles.summaryRows}>
+              {po.subtotal != null && (
+                <div className={styles.summaryRow}>
+                  <span className={styles.summaryLabel}>Subtotal</span>
+                  <span className={styles.summaryValue}>{fmtCurrency(po.subtotal)}</span>
+                </div>
+              )}
+              {po.tax != null && (
+                <div className={styles.summaryRow}>
+                  <span className={styles.summaryLabel}>Tax</span>
+                  <span className={styles.summaryValue}>{fmtCurrency(po.tax)}</span>
+                </div>
+              )}
+              {po.total != null && (
+                <div className={`${styles.summaryRow} ${styles.summaryGrandTotal}`}>
+                  <span className={styles.summaryGrandLabel}>Total</span>
+                  <span className={styles.summaryGrandValue}>{fmtCurrency(po.total)}</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className={styles.totalRow}>
-            <span className={styles.totalLabel}>Tax</span>
-            <span className={styles.totalValue}>{fmt(po.tax)}</span>
-          </div>
-          <div className={styles.totalRow}>
-            <span className={styles.totalLabel}>Shipping</span>
-            <span className={styles.totalValue}>{fmt(po.shipping)}</span>
-          </div>
-          <div className={`${styles.totalRow} ${styles.grandTotal}`}>
-            <span className={styles.grandTotalLabel}>Total</span>
-            <span className={styles.grandTotalValue}>{fmt(po.total)}</span>
-          </div>
+        )}
+      </div>
+
+      {/* ── Source Text ─────────────────────────────────────────────────── */}
+      {extractedText && (
+        <div className={styles.card}>
+          <details>
+            <summary className={styles.sourceTextSummary}>
+              <span className={styles.sourceTextIcon}>📄</span>
+              View Source Text
+              <span className={styles.sourceTextChevron}>›</span>
+            </summary>
+            <pre className={styles.sourceTextPre}>{extractedText}</pre>
+          </details>
         </div>
+      )}
+
+      {/* ── Bottom Actions ──────────────────────────────────────────────── */}
+      <div className={styles.bottomActions}>
+        <button className={styles.uploadAnotherBtn} onClick={handleUploadAnother}>
+          + Upload Another Purchase Order
+        </button>
       </div>
 
       {/* Info banner */}

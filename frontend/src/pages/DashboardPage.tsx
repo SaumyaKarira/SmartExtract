@@ -1,13 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import UploadModal from '../components/UploadModal';
 import styles from './DashboardPage.module.css';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [uploadOpen, setUploadOpen] = useState(
+    location.state?.openUpload === true
+  );
 
   const firstName = user?.name.split(' ')[0] ?? 'there';
+
+  // Clear the openUpload state so browser back doesn't re-open it
+  useEffect(() => {
+    if (location.state?.openUpload) {
+      window.history.replaceState({}, '');
+    }
+  }, []);
+
+  const handleUploadSuccess = (
+    poId: number | null,
+    _status: string,
+    extractedText: string | null,
+    _fileName: string
+  ) => {
+    setUploadOpen(false);
+    if (poId) {
+      navigate(`/dashboard/po/${poId}`, { state: { extractedText, fromUpload: true } });
+    }
+  };
 
   return (
     <>
@@ -70,7 +94,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={handleUploadSuccess} />
     </>
   );
 }

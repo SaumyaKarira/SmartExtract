@@ -45,7 +45,7 @@ public class DocumentService {
 
     public List<DocumentResponse> getByUser(Long userId) {
         return documentRepository.findByUserId(userId).stream()
-                .map(doc -> toResponse(doc, null, null))
+                .map(doc -> toResponse(doc, null, null, null))
                 .toList();
     }
 
@@ -93,7 +93,7 @@ public class DocumentService {
         } catch (Exception e) {
             doc.setStatus(DocumentStatus.FAILED);
             documentRepository.save(doc);
-            return toResponse(doc, extractedText, null);
+            return toResponse(doc, extractedText, null, null);
         }
 
         // Persist PurchaseOrder + items
@@ -124,16 +124,15 @@ public class DocumentService {
                 }
             }
 
-            purchaseOrderRepository.save(po);
+            PurchaseOrder savedPo = purchaseOrderRepository.save(po);
             doc.setStatus(DocumentStatus.COMPLETED);
             documentRepository.save(doc);
+            return toResponse(doc, extractedText, extractedPO, savedPo.getId());
         } catch (Exception e) {
             doc.setStatus(DocumentStatus.FAILED);
             documentRepository.save(doc);
-            return toResponse(doc, extractedText, null);
+            return toResponse(doc, extractedText, null, null);
         }
-
-        return toResponse(doc, extractedText, extractedPO);
     }
 
     private LocalDate parseDate(String dateStr) {
@@ -147,10 +146,11 @@ public class DocumentService {
         return null;
     }
 
-    private DocumentResponse toResponse(Document doc, String extractedText, ExtractedPurchaseOrder extractedPO) {
+    private DocumentResponse toResponse(Document doc, String extractedText, ExtractedPurchaseOrder extractedPO, Long purchaseOrderId) {
         return new DocumentResponse(
                 doc.getId(),
                 doc.getUser().getId(),
+                purchaseOrderId,
                 doc.getFileName(),
                 doc.getFileType(),
                 doc.getStatus(),

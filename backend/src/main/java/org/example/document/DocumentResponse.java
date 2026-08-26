@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public record DocumentResponse(
         Long id,
         Long userId,
+        Long purchaseOrderId,
         String fileName,
         String fileType,
         DocumentStatus status,

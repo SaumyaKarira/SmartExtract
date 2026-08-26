@@ -277,9 +277,15 @@ public class DocumentService {
             }
         } else {
             // Validate DOCX structure
-            try (XWPFDocument docx = new XWPFDocument(new java.io.ByteArrayInputStream(fileBytes))) {
-                // Successfully opened — structure is valid; touch paragraphs to ensure full parsing
-                docx.getParagraphs();
+            try {
+                XWPFDocument docx = new XWPFDocument(new java.io.ByteArrayInputStream(fileBytes));
+                try {
+                    docx.getParagraphs(); // parse document structure
+                } finally {
+                    try { docx.close(); } catch (Exception ignored) {}
+                }
+            } catch (ResponseStatusException rse) {
+                throw rse;
             } catch (Exception e) {
                 log.warn("Apache POI could not load DOCX for validation: {}", e.getMessage());
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
@@ -310,10 +316,15 @@ public class DocumentService {
                         "No text could be extracted from this PDF. It may be a scanned image-only document and is not supported at this time.");
             }
         } else {
-            // DOCX
-            try (XWPFDocument docx = new XWPFDocument(new java.io.ByteArrayInputStream(fileBytes));
-                 XWPFWordExtractor extractor = new XWPFWordExtractor(docx)) {
-                text = extractor.getText().strip();
+            // DOCX — extract via Apache POI XWPFWordExtractor.
+            // Note: XWPFWordExtractor.close() also closes the underlying XWPFDocument,
+            // so we only wrap the extractor (not the document) in try-with-resources
+            // to avoid double-close exceptions escaping the block.
+            try {
+                XWPFDocument docx = new XWPFDocument(new java.io.ByteArrayInputStream(fileBytes));
+                try (XWPFWordExtractor extractor = new XWPFWordExtractor(docx)) {
+                    text = extractor.getText().strip();
+                }
             } catch (Exception e) {
                 log.warn("Apache POI DOCX text extraction failed: {}", e.getMessage());
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,

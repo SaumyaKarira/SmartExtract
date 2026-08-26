@@ -29,7 +29,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     let message = `Request failed: ${res.status}`;
     try {
       const body = await res.json();
-      message = body.message ?? body.error ?? message;
+      // Spring Boot RFC 7807 uses `detail`; legacy uses `message` or `error`
+      message = body.detail ?? body.message ?? body.error ?? message;
     } catch {
       // ignore parse errors
     }

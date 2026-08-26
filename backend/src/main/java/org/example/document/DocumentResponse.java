@@ -13,6 +13,7 @@ public record DocumentResponse(
         DocumentStatus status,
         LocalDateTime uploadedAt,
         String extractedText,
-        ExtractedPurchaseOrder extractedPurchaseOrder
+        ExtractedPurchaseOrder extractedPurchaseOrder,
+        boolean duplicate
 ) {}
 

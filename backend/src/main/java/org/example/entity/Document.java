@@ -33,6 +33,9 @@ public class Document {
     @Column(name = "uploaded_at", nullable = false)
     private LocalDateTime uploadedAt;
 
+    @Column(name = "file_hash", length = 64)
+    private String fileHash;
+
     @OneToOne(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true)
     private PurchaseOrder purchaseOrder;
 }

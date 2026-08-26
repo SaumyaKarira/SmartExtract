@@ -18,10 +18,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.HexFormat;
 import java.util.List;
 
 @Service
@@ -45,7 +48,7 @@ public class DocumentService {
 
     public List<DocumentResponse> getByUser(Long userId) {
         return documentRepository.findByUserId(userId).stream()
-                .map(doc -> toResponse(doc, null, null, null))
+                .map(doc -> toResponse(doc, null, null, null, false))
                 .toList();
     }
 
@@ -61,8 +64,29 @@ public class DocumentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PDF files are accepted");
         }
 
+        // Read bytes once — used for hash and PDFBox
+        byte[] fileBytes;
+        try {
+            fileBytes = file.getBytes();
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not read file: " + e.getMessage());
+        }
+
+        // Compute SHA-256 hash from actual bytes
+        String fileHash = sha256Hex(fileBytes);
+
+        // Duplicate check — same user, same file content
+        var existing = documentRepository.findByUserIdAndFileHash(userId, fileHash);
+        if (existing.isPresent()) {
+            Document existingDoc = existing.get();
+            Long existingPoId = existingDoc.getPurchaseOrder() != null
+                    ? existingDoc.getPurchaseOrder().getId() : null;
+            return toResponse(existingDoc, null, null, existingPoId, true);
+        }
+
+        // Extract text via PDFBox
         String extractedText;
-        try (PDDocument pdDocument = Loader.loadPDF(file.getBytes())) {
+        try (PDDocument pdDocument = Loader.loadPDF(fileBytes)) {
             PDFTextStripper stripper = new PDFTextStripper();
             extractedText = stripper.getText(pdDocument).strip();
         } catch (IOException e) {
@@ -77,13 +101,14 @@ public class DocumentService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        // Save document with PROCESSING status first
+        // Save document with PROCESSING status + hash
         Document doc = new Document();
         doc.setUser(user);
         doc.setFileName(originalName);
         doc.setFileType("application/pdf");
         doc.setStatus(DocumentStatus.PROCESSING);
         doc.setUploadedAt(LocalDateTime.now());
+        doc.setFileHash(fileHash);
         doc = documentRepository.save(doc);
 
         // LLM extraction — on failure mark FAILED and return
@@ -93,7 +118,7 @@ public class DocumentService {
         } catch (Exception e) {
             doc.setStatus(DocumentStatus.FAILED);
             documentRepository.save(doc);
-            return toResponse(doc, extractedText, null, null);
+            return toResponse(doc, extractedText, null, null, false);
         }
 
         // Persist PurchaseOrder + items
@@ -127,11 +152,20 @@ public class DocumentService {
             PurchaseOrder savedPo = purchaseOrderRepository.save(po);
             doc.setStatus(DocumentStatus.COMPLETED);
             documentRepository.save(doc);
-            return toResponse(doc, extractedText, extractedPO, savedPo.getId());
+            return toResponse(doc, extractedText, extractedPO, savedPo.getId(), false);
         } catch (Exception e) {
             doc.setStatus(DocumentStatus.FAILED);
             documentRepository.save(doc);
-            return toResponse(doc, extractedText, null, null);
+            return toResponse(doc, extractedText, null, null, false);
+        }
+    }
+
+    private String sha256Hex(byte[] bytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(bytes));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
         }
     }
 
@@ -146,7 +180,8 @@ public class DocumentService {
         return null;
     }
 
-    private DocumentResponse toResponse(Document doc, String extractedText, ExtractedPurchaseOrder extractedPO, Long purchaseOrderId) {
+    private DocumentResponse toResponse(Document doc, String extractedText, ExtractedPurchaseOrder extractedPO,
+                                         Long purchaseOrderId, boolean duplicate) {
         return new DocumentResponse(
                 doc.getId(),
                 doc.getUser().getId(),
@@ -156,7 +191,8 @@ public class DocumentService {
                 doc.getStatus(),
                 doc.getUploadedAt(),
                 extractedText,
-                extractedPO
+                extractedPO,
+                duplicate
         );
     }
 }

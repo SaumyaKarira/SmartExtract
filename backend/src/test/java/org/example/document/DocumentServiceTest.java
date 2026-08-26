@@ -60,7 +60,7 @@ class DocumentServiceTest {
 
         assertThatThrownBy(() -> documentService.upload(file, 1L))
                 .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Only PDF files are accepted");
+                .hasMessageContaining("Only PDF and DOCX files are accepted");
 
         verifyNoInteractions(documentRepository);
     }

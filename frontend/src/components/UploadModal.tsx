@@ -47,9 +47,14 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
   const isRetryMode = retryDocumentId != null;
   const noFileForRetry = isRetryMode && !retryFile;
 
+  const ACCEPTED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
+
   const validate = (f: File) => {
-    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-      setError('Only PDF files are accepted.');
+    const nameLower = f.name.toLowerCase();
+    const typeOk = ACCEPTED_TYPES.includes(f.type) || ACCEPTED_EXTENSIONS.some(ext => nameLower.endsWith(ext));
+    if (!typeOk) {
+      setError('Only PDF and DOCX files are accepted.');
       return false;
     }
     if (f.size > 10 * 1024 * 1024) {
@@ -158,7 +163,7 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
             <div className={styles.headerIcon}>📤</div>
             <div>
               <h2 className={styles.title}>{isRetryMode ? 'Retry Processing' : 'Upload Purchase Order'}</h2>
-              <p className={styles.subtitle}>Supported format: PDF · Max 10 MB · Max 100 pages</p>
+              <p className={styles.subtitle}>Supported formats: PDF, DOCX · Max 10 MB · Max 100 pages</p>
             </div>
           </div>
           <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">✕</button>
@@ -256,7 +261,7 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,application/pdf"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className={styles.fileInput}
                 onChange={onInputChange}
               />
@@ -283,7 +288,7 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
                     <span className={styles.dropIcon}>☁</span>
                   </div>
                   <p className={styles.dropPrimary}>
-                    {dragging ? 'Drop it here!' : 'Drag & drop your PDF here'}
+                    {dragging ? 'Drop it here!' : 'Drag & drop your PDF or DOCX here'}
                   </p>
                   <p className={styles.dropSecondary}>or</p>
                   <button
@@ -301,6 +306,7 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
 
             <div className={styles.formats}>
               <span className={styles.formatChip}>PDF</span>
+              <span className={styles.formatChip}>DOCX</span>
             </div>
 
             <div className={styles.footer}>

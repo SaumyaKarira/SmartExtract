@@ -3,6 +3,8 @@ package org.example.document;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.example.auth.UserRepository;
 import org.example.entity.Document;
 import org.example.entity.DocumentStatus;
@@ -69,6 +71,7 @@ public class DocumentService {
         // 1. Validate before creating any DB record
         byte[] fileBytes = validateAndReadBytes(file);
         String fileHash = sha256Hex(fileBytes);
+        String detectedContentType = detectFileType(file);
 
         // 2. Duplicate check
         Optional<Document> existing = documentRepository.findByUserIdAndFileHash(userId, fileHash);
@@ -86,10 +89,12 @@ public class DocumentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         // 4. Create DB record only after file is confirmed valid
+        String defaultFileName = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                .equals(detectedContentType) ? "upload.docx" : "upload.pdf";
         Document doc = new Document();
         doc.setUser(user);
-        doc.setFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.pdf");
-        doc.setFileType("application/pdf");
+        doc.setFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : defaultFileName);
+        doc.setFileType(detectedContentType != null ? detectedContentType : "application/pdf");
         doc.setStatus(DocumentStatus.PROCESSING);
         doc.setUploadedAt(LocalDateTime.now());
         doc.setFileHash(fileHash);
@@ -131,7 +136,7 @@ public class DocumentService {
         // Hash must match the original
         if (doc.getFileHash() != null && !doc.getFileHash().equals(fileHash)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "The uploaded file does not match the original document. Please upload the same PDF.");
+                    "The uploaded file does not match the original document. Please upload the same file.");
         }
 
         String extractedText = extractTextOrThrow(fileBytes);
@@ -206,20 +211,30 @@ public class DocumentService {
     // Validation helpers (no DB side-effects)
     // -------------------------------------------------------------------------
 
+    // Determine if file is PDF or DOCX; returns detected content type string
+    private String detectFileType(MultipartFile file) {
+        String contentType = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
+        String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        if ("application/pdf".equals(contentType) || originalName.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if ("application/vnd.openxmlformats-officedocument.wordprocessingml.document".equals(contentType)
+                || originalName.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+        return null;
+    }
+
     private byte[] validateAndReadBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "No file was provided. Please select a PDF to upload.");
+                    "No file was provided. Please select a PDF or DOCX file to upload.");
         }
 
-        String contentType = file.getContentType();
-        String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
-        boolean isPdf = "application/pdf".equalsIgnoreCase(contentType)
-                || originalName.toLowerCase().endsWith(".pdf");
-
-        if (!isPdf) {
+        String detectedType = detectFileType(file);
+        if (detectedType == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only PDF files are accepted. Please upload a valid PDF document.");
+                    "Only PDF and DOCX files are accepted. Please upload a valid PDF or DOCX document.");
         }
 
         if (file.getSize() > MAX_FILE_SIZE_BYTES) {
@@ -238,45 +253,76 @@ public class DocumentService {
 
         if (fileBytes.length == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "The uploaded file is empty. Please upload a valid PDF document.");
+                    "The uploaded file is empty. Please upload a valid PDF or DOCX document.");
         }
 
-        // Validate PDF structure and page count
-        try (PDDocument pdDoc = Loader.loadPDF(fileBytes)) {
-            int pages = pdDoc.getNumberOfPages();
-            if (pages == 0) {
+        if ("application/pdf".equals(detectedType)) {
+            // Validate PDF structure and page count
+            try (PDDocument pdDoc = Loader.loadPDF(fileBytes)) {
+                int pages = pdDoc.getNumberOfPages();
+                if (pages == 0) {
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "The PDF contains no pages. Please upload a valid PDF document.");
+                }
+                if (pages > MAX_PAGES) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "The PDF has " + pages + " pages. The maximum allowed is " + MAX_PAGES + " pages.");
+                }
+            } catch (ResponseStatusException rse) {
+                throw rse;
+            } catch (IOException e) {
+                log.warn("PDFBox could not load PDF for validation: {}", e.getMessage());
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "The PDF contains no pages. Please upload a valid PDF document.");
+                        "The file does not appear to be a valid or readable PDF. It may be corrupt or password-protected.");
             }
-            if (pages > MAX_PAGES) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "The PDF has " + pages + " pages. The maximum allowed is " + MAX_PAGES + " pages.");
+        } else {
+            // Validate DOCX structure
+            try (XWPFDocument docx = new XWPFDocument(new java.io.ByteArrayInputStream(fileBytes))) {
+                // Successfully opened — structure is valid; touch paragraphs to ensure full parsing
+                docx.getParagraphs();
+            } catch (Exception e) {
+                log.warn("Apache POI could not load DOCX for validation: {}", e.getMessage());
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "The file does not appear to be a valid or readable DOCX. It may be corrupt or an unsupported format.");
             }
-        } catch (ResponseStatusException rse) {
-            throw rse;
-        } catch (IOException e) {
-            log.warn("PDFBox could not load PDF for validation: {}", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "The file does not appear to be a valid or readable PDF. It may be corrupt or password-protected.");
         }
 
         return fileBytes;
     }
 
     private String extractTextOrThrow(byte[] fileBytes) {
-        String text;
-        try (PDDocument pdDocument = Loader.loadPDF(fileBytes)) {
-            PDFTextStripper stripper = new PDFTextStripper();
-            text = stripper.getText(pdDocument).strip();
-        } catch (IOException e) {
-            log.warn("PDFBox text extraction failed: {}", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "The PDF could not be parsed. It may be corrupt, password-protected, or an unsupported format.");
-        }
+        // Detect type by magic bytes: PDF starts with %PDF
+        boolean isPdf = fileBytes.length >= 4
+                && fileBytes[0] == '%' && fileBytes[1] == 'P' && fileBytes[2] == 'D' && fileBytes[3] == 'F';
 
-        if (text.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "No text could be extracted from this PDF. It may be a scanned image-only document and is not supported at this time.");
+        String text;
+        if (isPdf) {
+            try (PDDocument pdDocument = Loader.loadPDF(fileBytes)) {
+                PDFTextStripper stripper = new PDFTextStripper();
+                text = stripper.getText(pdDocument).strip();
+            } catch (IOException e) {
+                log.warn("PDFBox text extraction failed: {}", e.getMessage());
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "The PDF could not be parsed. It may be corrupt, password-protected, or an unsupported format.");
+            }
+            if (text.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "No text could be extracted from this PDF. It may be a scanned image-only document and is not supported at this time.");
+            }
+        } else {
+            // DOCX
+            try (XWPFDocument docx = new XWPFDocument(new java.io.ByteArrayInputStream(fileBytes));
+                 XWPFWordExtractor extractor = new XWPFWordExtractor(docx)) {
+                text = extractor.getText().strip();
+            } catch (Exception e) {
+                log.warn("Apache POI DOCX text extraction failed: {}", e.getMessage());
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "The DOCX file could not be parsed. It may be corrupt or an unsupported format.");
+            }
+            if (text.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "No text could be extracted from this DOCX. The document appears to be empty.");
+            }
         }
 
         return text;

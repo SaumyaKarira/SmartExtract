@@ -1,5 +1,6 @@
 package org.example.purchaseorder;
 
+import org.example.document.DocumentRepository;
 import org.example.entity.Document;
 import org.example.entity.DocumentStatus;
 import org.example.entity.PurchaseOrder;
@@ -19,14 +20,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/**
- * Unit tests for PurchaseOrderService — user-data isolation.
- * Verifies that User A cannot access User B's purchase orders.
- */
 @ExtendWith(MockitoExtension.class)
 class PurchaseOrderServiceAuthTest {
 
     @Mock PurchaseOrderRepository purchaseOrderRepository;
+    @Mock DocumentRepository documentRepository;
 
     @InjectMocks PurchaseOrderService purchaseOrderService;
 
@@ -65,17 +63,14 @@ class PurchaseOrderServiceAuthTest {
     void getByIdAndUser_allowsOwnerAccess() {
         when(purchaseOrderRepository.findByIdAndUserId(100L, 2L))
                 .thenReturn(Optional.of(poOwnedByUserB));
-
         PurchaseOrderResponse response = purchaseOrderService.getByIdAndUser(100L, 2L);
         assertThat(response.id()).isEqualTo(100L);
     }
 
     @Test
     void getByIdAndUser_deniesAccessToOtherUser() {
-        // User A tries to access User B's PO — repository returns empty because userId filter
         when(purchaseOrderRepository.findByIdAndUserId(100L, 1L))
                 .thenReturn(Optional.empty());
-
         assertThatThrownBy(() -> purchaseOrderService.getByIdAndUser(100L, 1L))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Purchase order not found");
@@ -85,22 +80,16 @@ class PurchaseOrderServiceAuthTest {
     void getByIdAndUser_errorMessageDoesNotRevealOwnership() {
         when(purchaseOrderRepository.findByIdAndUserId(100L, 1L))
                 .thenReturn(Optional.empty());
-
         ResponseStatusException ex = catchThrowableOfType(
                 () -> purchaseOrderService.getByIdAndUser(100L, 1L),
                 ResponseStatusException.class);
-
-        // Must not say "belongs to another user" or reveal cross-user info
         assertThat(ex.getReason()).doesNotContainIgnoringCase("user b");
         assertThat(ex.getReason()).doesNotContainIgnoringCase("another user");
         assertThat(ex.getReason()).doesNotContainIgnoringCase("forbidden");
     }
 
     @Test
-    void getByUser_onlyReturnsOwnPOs() {
-        PurchaseOrder ownPO = new PurchaseOrder();
-        ownPO.setId(200L);
-        ownPO.setUser(userA);
+    void getByUser_onlyReturnsOwnDocuments() {
         Document doc = new Document();
         doc.setId(20L);
         doc.setUser(userA);
@@ -108,16 +97,49 @@ class PurchaseOrderServiceAuthTest {
         doc.setFileType("application/pdf");
         doc.setStatus(DocumentStatus.COMPLETED);
         doc.setUploadedAt(LocalDateTime.now());
+
+        PurchaseOrder ownPO = new PurchaseOrder();
+        ownPO.setId(200L);
+        ownPO.setUser(userA);
         ownPO.setDocument(doc);
         ownPO.setCreatedAt(LocalDateTime.now());
+        doc.setPurchaseOrder(ownPO);
 
-        when(purchaseOrderRepository.findByUserId(1L)).thenReturn(List.of(ownPO));
+        when(documentRepository.findByUserId(1L)).thenReturn(List.of(doc));
 
         List<PurchaseOrderResponse> results = purchaseOrderService.getByUser(1L);
         assertThat(results).hasSize(1);
         assertThat(results.get(0).id()).isEqualTo(200L);
-        verify(purchaseOrderRepository).findByUserId(1L);
-        verify(purchaseOrderRepository, never()).findByUserId(2L);
+        assertThat(results.get(0).documentId()).isEqualTo(20L);
+        verify(documentRepository).findByUserId(1L);
+        verify(documentRepository, never()).findByUserId(2L);
+    }
+
+    @Test
+    void getByUser_includesFailedDocumentWithNoPo() {
+        Document failedDoc = new Document();
+        failedDoc.setId(30L);
+        failedDoc.setUser(userA);
+        failedDoc.setFileName("broken.pdf");
+        failedDoc.setFileType("application/pdf");
+        failedDoc.setStatus(DocumentStatus.FAILED);
+        failedDoc.setUploadedAt(LocalDateTime.now());
+        failedDoc.setRetryable(true);
+        failedDoc.setErrorMessage("AI extraction failed due to a temporary service issue.");
+        // purchaseOrder not set — getPurchaseOrder() returns null
+
+        when(documentRepository.findByUserId(1L)).thenReturn(List.of(failedDoc));
+
+        List<PurchaseOrderResponse> results = purchaseOrderService.getByUser(1L);
+        assertThat(results).hasSize(1);
+
+        PurchaseOrderResponse row = results.get(0);
+        assertThat(row.id()).isNull();
+        assertThat(row.documentId()).isEqualTo(30L);
+        assertThat(row.status()).isEqualTo("FAILED");
+        assertThat(row.retryable()).isTrue();
+        assertThat(row.errorMessage()).contains("temporary service issue");
+        assertThat(row.poNumber()).isNull();
+        assertThat(row.total()).isNull();
     }
 }
-

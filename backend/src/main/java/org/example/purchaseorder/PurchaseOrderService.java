@@ -1,5 +1,7 @@
 package org.example.purchaseorder;
 
+import org.example.document.DocumentRepository;
+import org.example.entity.Document;
 import org.example.entity.PurchaseOrder;
 import org.example.entity.PurchaseOrderItem;
 import org.springframework.http.HttpStatus;
@@ -14,14 +16,22 @@ import java.util.List;
 public class PurchaseOrderService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final DocumentRepository documentRepository;
 
-    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository) {
+    public PurchaseOrderService(PurchaseOrderRepository purchaseOrderRepository,
+                                DocumentRepository documentRepository) {
         this.purchaseOrderRepository = purchaseOrderRepository;
+        this.documentRepository = documentRepository;
     }
 
+    /**
+     * Fetch all documents for the user, then use the associated PO (if present).
+     * This mirrors a LEFT JOIN from documents → purchase_orders: documents without
+     * a PO (e.g. FAILED before Gemini produced a result) are included with null PO fields.
+     */
     public List<PurchaseOrderResponse> getByUser(Long userId) {
-        return purchaseOrderRepository.findByUserId(userId).stream()
-                .map(po -> toResponse(po, false))
+        return documentRepository.findByUserId(userId).stream()
+                .map(this::documentToResponse)
                 .toList();
     }
 
@@ -29,10 +39,37 @@ public class PurchaseOrderService {
         PurchaseOrder po = purchaseOrderRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Purchase order not found"));
-        return toResponse(po, true);
+        return poToResponse(po, true);
     }
 
-    private PurchaseOrderResponse toResponse(PurchaseOrder po, boolean includeItems) {
+    /**
+     * Build a response from a Document, using its PurchaseOrder if one exists.
+     * When purchaseOrder is null the PO fields are null — this covers FAILED documents.
+     */
+    private PurchaseOrderResponse documentToResponse(Document doc) {
+        PurchaseOrder po = doc.getPurchaseOrder();
+        if (po != null) {
+            return poToResponse(po, false);
+        }
+        // Document has no PO — return document metadata with null PO fields
+        return new PurchaseOrderResponse(
+                null,
+                doc.getUser().getId(),
+                doc.getId(),
+                doc.getFileName(),
+                null, null, null, null, null, null,
+                null, null, null,
+                doc.getUploadedAt(),
+                List.of(),
+                doc.getStatus() != null ? doc.getStatus().name() : null,
+                null,
+                null,
+                doc.isRetryable(),
+                doc.getErrorMessage()
+        );
+    }
+
+    private PurchaseOrderResponse poToResponse(PurchaseOrder po, boolean includeItems) {
         List<PurchaseOrderResponse.PurchaseOrderItemResponse> items = includeItems
                 ? po.getItems().stream().map(this::toItemResponse).toList()
                 : List.of();
@@ -53,10 +90,11 @@ public class PurchaseOrderService {
                 po.getTotal(),
                 po.getCreatedAt(),
                 items,
-                po.getDocument() != null && po.getDocument().getStatus() != null
-                        ? po.getDocument().getStatus().name() : null,
+                po.getDocument().getStatus() != null ? po.getDocument().getStatus().name() : null,
                 po.getValidationCorrections(),
-                po.getValidationReviewReasons()
+                po.getValidationReviewReasons(),
+                null,
+                null
         );
     }
 

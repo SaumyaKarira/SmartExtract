@@ -201,7 +201,7 @@ public class PurchaseOrderSearchService {
                 po.getPoNumber(), po.getSupplier(), po.getOrderDate(), po.getDeliveryDate(),
                 po.getPaymentTerms(), po.getCurrency(), po.getSubtotal(), po.getTax(),
                 po.getTotal(), po.getCreatedAt(), items, status,
-                po.getValidationCorrections(), po.getValidationReviewReasons());
+                po.getValidationCorrections(), po.getValidationReviewReasons(), null, null);
     }
 }
 

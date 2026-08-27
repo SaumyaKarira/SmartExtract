@@ -18,16 +18,22 @@ interface PurchaseOrder {
 function StatusBadge({ status }: { status: string }) {
   const cls =
     status === 'COMPLETED' ? styles.badgeCompleted
+    : status === 'COMPLETED_WITH_CORRECTIONS' ? styles.badgeCorrected
+    : status === 'NEEDS_REVIEW' ? styles.badgeNeedsReview
     : status === 'PROCESSING' ? styles.badgeProcessing
     : status === 'FAILED' ? styles.badgeFailed
     : styles.badgeDefault;
   const icon =
     status === 'COMPLETED' ? '✓ '
+    : status === 'COMPLETED_WITH_CORRECTIONS' ? '✎ '
+    : status === 'NEEDS_REVIEW' ? '⚠ '
     : status === 'PROCESSING' ? '⟳ '
     : status === 'FAILED' ? '✕ '
     : '';
   const label =
     status === 'COMPLETED' ? 'Completed'
+    : status === 'COMPLETED_WITH_CORRECTIONS' ? 'Corrected'
+    : status === 'NEEDS_REVIEW' ? 'Needs Review'
     : status === 'PROCESSING' ? 'Processing'
     : status === 'FAILED' ? 'Failed'
     : status;

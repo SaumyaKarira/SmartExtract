@@ -12,6 +12,8 @@ import org.example.entity.PurchaseOrder;
 import org.example.entity.PurchaseOrderItem;
 import org.example.entity.User;
 import org.example.purchaseorder.PurchaseOrderRepository;
+import org.example.validation.PoValidationService;
+import org.example.validation.ValidationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -30,6 +35,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -45,15 +51,21 @@ public class DocumentService {
     private final UserRepository userRepository;
     private final LlmExtractionService llmExtractionService;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PoValidationService poValidationService;
+    private final ObjectMapper objectMapper;
 
     public DocumentService(DocumentRepository documentRepository,
                            UserRepository userRepository,
                            LlmExtractionService llmExtractionService,
-                           PurchaseOrderRepository purchaseOrderRepository) {
+                           PurchaseOrderRepository purchaseOrderRepository,
+                           PoValidationService poValidationService,
+                           ObjectMapper objectMapper) {
         this.documentRepository = documentRepository;
         this.userRepository = userRepository;
         this.llmExtractionService = llmExtractionService;
         this.purchaseOrderRepository = purchaseOrderRepository;
+        this.poValidationService = poValidationService;
+        this.objectMapper = objectMapper;
     }
 
     public List<DocumentResponse> getByUser(Long userId) {
@@ -168,6 +180,19 @@ public class DocumentService {
             return failDocument(doc, retryable, userMsg);
         }
 
+        // ── Deterministic validation ──────────────────────────────────────────
+        ValidationResult validationResult;
+        try {
+            validationResult = poValidationService.validate(extractedPO);
+        } catch (Exception e) {
+            log.error("Validation service threw unexpectedly for document {}: {}", doc.getId(), e.getMessage(), e);
+            // Treat as a retryable infrastructure failure
+            return failDocument(doc, true, "A temporary error occurred during validation. Please retry.");
+        }
+
+        // Build effective line items applying any corrections
+        List<ValidationResult.Correction> corrections = validationResult.corrections();
+
         try {
             PurchaseOrder po = new PurchaseOrder();
             po.setUser(user);
@@ -181,7 +206,8 @@ public class DocumentService {
             po.setOrderDate(parseDate(extractedPO.poDate()));
 
             if (extractedPO.items() != null) {
-                for (ExtractedPurchaseOrder.ExtractedLineItem lineItem : extractedPO.items()) {
+                for (int i = 0; i < extractedPO.items().size(); i++) {
+                    ExtractedPurchaseOrder.ExtractedLineItem lineItem = extractedPO.items().get(i);
                     PurchaseOrderItem item = new PurchaseOrderItem();
                     item.setPurchaseOrder(po);
                     item.setDescription(lineItem.description());
@@ -189,14 +215,32 @@ public class DocumentService {
                             ? BigDecimal.valueOf(lineItem.quantity()) : null);
                     item.setUnitPrice(lineItem.unitPrice() != null
                             ? BigDecimal.valueOf(lineItem.unitPrice()) : null);
-                    item.setTotalPrice(lineItem.totalPrice() != null
-                            ? BigDecimal.valueOf(lineItem.totalPrice()) : null);
+
+                    // Apply correction for totalPrice if present
+                    Double effectiveTotalPrice = lineItem.totalPrice();
+                    final String correctionKey = "items[" + i + "].totalPrice";
+                    for (ValidationResult.Correction c : corrections) {
+                        if (correctionKey.equals(c.field())) {
+                            effectiveTotalPrice = c.correctedValue();
+                            break;
+                        }
+                    }
+                    item.setTotalPrice(effectiveTotalPrice != null
+                            ? BigDecimal.valueOf(effectiveTotalPrice) : null);
                     po.getItems().add(item);
                 }
             }
 
+            // Persist validation metadata as JSON
+            if (!corrections.isEmpty()) {
+                po.setValidationCorrections(toJson(corrections));
+            }
+            if (!validationResult.reviewReasons().isEmpty()) {
+                po.setValidationReviewReasons(toJson(validationResult.reviewReasons()));
+            }
+
             PurchaseOrder savedPo = purchaseOrderRepository.save(po);
-            doc.setStatus(DocumentStatus.COMPLETED);
+            doc.setStatus(validationResult.outcome());
             doc.setRetryable(false);
             doc.setErrorMessage(null);
             documentRepository.save(doc);
@@ -345,6 +389,15 @@ public class DocumentService {
         doc.setErrorMessage(userMessage);
         documentRepository.save(doc);
         return toResponse(doc, null, null, null, false);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialise validation metadata to JSON: {}", e.getMessage());
+            return null;
+        }
     }
 
     private boolean isRetryableException(Exception e) {

@@ -167,7 +167,8 @@ public class PurchaseOrderSearchService {
                 po.getId(), po.getUser().getId(), po.getDocument().getId(),
                 po.getPoNumber(), po.getSupplier(), po.getOrderDate(), po.getDeliveryDate(),
                 po.getPaymentTerms(), po.getCurrency(), po.getSubtotal(), po.getTax(),
-                po.getTotal(), po.getCreatedAt(), items, status);
+                po.getTotal(), po.getCreatedAt(), items, status,
+                po.getValidationCorrections(), po.getValidationReviewReasons());
     }
 }
 

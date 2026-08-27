@@ -66,10 +66,12 @@ const fmtDate = (val: string | null) => {
 function StatusBadge({ status }: { status: string | null }) {
   if (!status) return null;
   const map: Record<string, { label: string; cls: string }> = {
-    COMPLETED:  { label: '✓ Completed',  cls: styles.badgeCompleted },
-    PROCESSING: { label: '⏳ Processing', cls: styles.badgeProcessing },
-    FAILED:     { label: '✕ Failed',     cls: styles.badgeFailed },
-    UPLOADED:   { label: '↑ Uploaded',   cls: styles.badgeUploaded },
+    COMPLETED:                  { label: '✓ Completed',    cls: styles.badgeCompleted },
+    COMPLETED_WITH_CORRECTIONS: { label: '✎ Corrected',    cls: styles.badgeCorrected },
+    NEEDS_REVIEW:               { label: '⚠ Needs Review', cls: styles.badgeNeedsReview },
+    PROCESSING:                 { label: '⏳ Processing',   cls: styles.badgeProcessing },
+    FAILED:                     { label: '✕ Failed',       cls: styles.badgeFailed },
+    UPLOADED:                   { label: '↑ Uploaded',     cls: styles.badgeUploaded },
   };
   const info = map[status] ?? { label: status, cls: styles.badgeUploaded };
   return <span className={`${styles.badge} ${info.cls}`}>{info.label}</span>;

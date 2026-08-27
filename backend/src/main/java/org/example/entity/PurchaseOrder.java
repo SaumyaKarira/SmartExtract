@@ -58,6 +58,20 @@ public class PurchaseOrder {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JSON array of correction objects produced by the validation layer.
+     * Stored as TEXT/JSONB; null when outcome is COMPLETED or NEEDS_REVIEW.
+     */
+    @Column(name = "validation_corrections", columnDefinition = "TEXT")
+    private String validationCorrections;
+
+    /**
+     * JSON array of review-reason strings produced by the validation layer.
+     * Stored as TEXT; null when outcome is COMPLETED or COMPLETED_WITH_CORRECTIONS.
+     */
+    @Column(name = "validation_review_reasons", columnDefinition = "TEXT")
+    private String validationReviewReasons;
+
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PurchaseOrderItem> items = new ArrayList<>();
 }

@@ -282,6 +282,16 @@
   color: #16a34a;
 }
 
+.badgeCorrected {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.badgeNeedsReview {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .badgeProcessed {
   background: #dcfce7;
   color: #16a34a;

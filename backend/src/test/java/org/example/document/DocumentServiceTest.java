@@ -7,6 +7,9 @@ import org.example.entity.Document;
 import org.example.entity.DocumentStatus;
 import org.example.entity.User;
 import org.example.purchaseorder.PurchaseOrderRepository;
+import org.example.validation.PoValidationService;
+import org.example.validation.ValidationResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +39,8 @@ class DocumentServiceTest {
     @Mock UserRepository userRepository;
     @Mock LlmExtractionService llmExtractionService;
     @Mock PurchaseOrderRepository purchaseOrderRepository;
+    @Mock PoValidationService poValidationService;
+    @Mock ObjectMapper objectMapper;
 
     @InjectMocks DocumentService documentService;
 

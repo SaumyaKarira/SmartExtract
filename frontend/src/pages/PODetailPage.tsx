@@ -25,6 +25,9 @@ interface PurchaseOrderDetail {
   total: number | null;
   createdAt: string;
   items: POItem[];
+  status: string | null;
+  validationCorrections: string | null;   // JSON string of Correction[]
+  validationReviewReasons: string | null; // JSON string of string[]
 }
 
 const fmtCurrency = (val: number | null) =>
@@ -68,6 +71,20 @@ export default function PODetailPage() {
       .catch(err => { setError(err instanceof Error ? err.message : 'Failed to load purchase order.'); setLoading(false); });
   }, [poId]);
 
+  // Parse validation metadata
+  interface Correction { field: string; originalValue: number | null; correctedValue: number; reason: string; }
+  const corrections: Correction[] = (() => {
+    try { return po?.validationCorrections ? JSON.parse(po.validationCorrections) : []; }
+    catch { return []; }
+  })();
+  const reviewReasons: string[] = (() => {
+    try { return po?.validationReviewReasons ? JSON.parse(po.validationReviewReasons) : []; }
+    catch { return []; }
+  })();
+
+  const isCompletedWithCorrections = po?.status === 'COMPLETED_WITH_CORRECTIONS';
+  const isNeedsReview = po?.status === 'NEEDS_REVIEW';
+
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) return (
     <div className={styles.page}>
@@ -110,11 +127,69 @@ export default function PODetailPage() {
           <p className={styles.vendorName}>{po.supplier ?? 'Unknown Vendor'}</p>
         </div>
         <div className={styles.pageHeaderRight}>
-          <span className={`${styles.statusBadge} ${styles.statusBadgeGreen}`}>
-            ✓ Completed
-          </span>
+          {isNeedsReview ? (
+            <span className={`${styles.statusBadge} ${styles.statusBadgeOrange}`}>
+              ⚠ Needs Review
+            </span>
+          ) : isCompletedWithCorrections ? (
+            <span className={`${styles.statusBadge} ${styles.statusBadgeAmber}`}>
+              ✎ Corrected
+            </span>
+          ) : (
+            <span className={`${styles.statusBadge} ${styles.statusBadgeGreen}`}>
+              ✓ Completed
+            </span>
+          )}
         </div>
       </div>
+
+      {/* ── COMPLETED_WITH_CORRECTIONS banner ────────────────────────────── */}
+      {isCompletedWithCorrections && corrections.length > 0 && (
+        <div className={styles.correctionsBanner}>
+          <span className={styles.correctionsBannerIcon}>✎</span>
+          <div className={styles.correctionsBannerBody}>
+            <p className={styles.correctionsBannerTitle}>Calculation Corrections Applied</p>
+            <p className={styles.correctionsBannerText}>
+              SmartExtract detected and automatically corrected {corrections.length} calculation{corrections.length !== 1 ? 's' : ''}.
+              Original extracted values are shown below for reference.
+            </p>
+            <ul className={styles.correctionsList}>
+              {corrections.map((c, i) => (
+                <li key={i} className={styles.correctionsListItem}>
+                  <strong>{c.field}:</strong>{' '}
+                  {c.originalValue != null && (
+                    <span className={styles.correctionOriginal}>
+                      {c.originalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                  <span className={styles.correctionNew}>
+                    → {c.correctedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                  — {c.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* ── NEEDS_REVIEW banner ──────────────────────────────────────────── */}
+      {isNeedsReview && reviewReasons.length > 0 && (
+        <div className={styles.reviewBanner}>
+          <span className={styles.reviewBannerIcon}>⚠️</span>
+          <div className={styles.reviewBannerBody}>
+            <p className={styles.reviewBannerTitle}>Review Required</p>
+            <p className={styles.reviewBannerText}>
+              Some fields could not be reliably extracted. Please review the data below before use.
+            </p>
+            <ul className={styles.reviewList}>
+              {reviewReasons.map((r, i) => (
+                <li key={i} className={styles.reviewListItem}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* ── AI Extracted Details ────────────────────────────────────────── */}
       <div className={styles.card}>

@@ -289,10 +289,12 @@
   border-radius: 20px;
   white-space: nowrap;
 }
-.badgeCompleted  { background: #dcfce7; color: #16a34a; }
-.badgeProcessing { background: #eff6ff; color: var(--blue-600); }
-.badgeFailed     { background: #fee2e2; color: #dc2626; }
-.badgeUploaded   { background: #f3f4f6; color: var(--gray-600); }
+.badgeCompleted              { background: #dcfce7; color: #16a34a; }
+.badgeCorrected              { background: #fffbeb; color: #92400e; }
+.badgeNeedsReview            { background: #fff7ed; color: #c2410c; }
+.badgeProcessing             { background: #eff6ff; color: var(--blue-600); }
+.badgeFailed                 { background: #fee2e2; color: #dc2626; }
+.badgeUploaded               { background: #f3f4f6; color: var(--gray-600); }
 
 /* Pagination */
 .pagination {

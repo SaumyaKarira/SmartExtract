@@ -53,7 +53,9 @@ public class PurchaseOrderService {
                 po.getCreatedAt(),
                 items,
                 po.getDocument() != null && po.getDocument().getStatus() != null
-                        ? po.getDocument().getStatus().name() : null
+                        ? po.getDocument().getStatus().name() : null,
+                po.getValidationCorrections(),
+                po.getValidationReviewReasons()
         );
     }
 

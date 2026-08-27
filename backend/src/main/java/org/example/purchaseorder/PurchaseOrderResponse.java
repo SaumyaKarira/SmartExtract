@@ -20,7 +20,11 @@ public record PurchaseOrderResponse(
         BigDecimal total,
         LocalDateTime createdAt,
         List<PurchaseOrderItemResponse> items,
-        String status
+        String status,
+        /** JSON string of ValidationResult.Correction list; null if not COMPLETED_WITH_CORRECTIONS. */
+        String validationCorrections,
+        /** JSON string of review-reason strings; null if not NEEDS_REVIEW. */
+        String validationReviewReasons
 ) {
     public record PurchaseOrderItemResponse(
             Long id,

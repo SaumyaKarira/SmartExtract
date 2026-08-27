@@ -7,6 +7,9 @@ import org.example.entity.DocumentStatus;
 import org.example.entity.PurchaseOrder;
 import org.example.entity.User;
 import org.example.purchaseorder.PurchaseOrderRepository;
+import org.example.validation.PoValidationService;
+import org.example.validation.ValidationResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -36,6 +40,8 @@ class DocxDocumentServiceTest {
     @Mock UserRepository userRepository;
     @Mock LlmExtractionService llmExtractionService;
     @Mock PurchaseOrderRepository purchaseOrderRepository;
+    @Mock PoValidationService poValidationService;
+    @Mock ObjectMapper objectMapper;
 
     @InjectMocks DocumentService documentService;
 
@@ -96,6 +102,9 @@ class DocxDocumentServiceTest {
                 "12345", "ACME Corp", null, null, 500.0, null);
         when(llmExtractionService.extract(anyString())).thenReturn(extracted);
 
+        when(poValidationService.validate(extracted)).thenReturn(
+                new ValidationResult(DocumentStatus.COMPLETED, List.of(), List.of()));
+
         PurchaseOrder savedPo = new PurchaseOrder();
         savedPo.setId(5L);
         savedPo.setUser(testUser);
@@ -135,6 +144,9 @@ class DocxDocumentServiceTest {
         ExtractedPurchaseOrder extracted = new ExtractedPurchaseOrder(
                 "99", "Widgets Inc", null, null, 1200.0, null);
         when(llmExtractionService.extract(anyString())).thenReturn(extracted);
+
+        when(poValidationService.validate(extracted)).thenReturn(
+                new ValidationResult(DocumentStatus.COMPLETED, List.of(), List.of()));
 
         PurchaseOrder savedPo = new PurchaseOrder();
         savedPo.setId(6L);

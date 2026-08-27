@@ -92,9 +92,49 @@
   white-space: nowrap;
 }
 
-.statusBadgeGreen { background: #dcfce7; color: #16a34a; }
-.statusBadgeBlue  { background: var(--blue-50); color: var(--blue-600); }
-.statusBadgeRed   { background: #fee2e2; color: #dc2626; }
+.statusBadgeGreen  { background: #dcfce7; color: #16a34a; }
+.statusBadgeBlue   { background: var(--blue-50); color: var(--blue-600); }
+.statusBadgeRed    { background: #fee2e2; color: #dc2626; }
+.statusBadgeAmber  { background: #fffbeb; color: #92400e; }
+.statusBadgeOrange { background: #fff7ed; color: #c2410c; }
+
+/* ── Corrections Banner (COMPLETED_WITH_CORRECTIONS) ─────────────────── */
+.correctionsBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.correctionsBannerIcon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.correctionsBannerBody { flex: 1; }
+.correctionsBannerTitle { font-size: 14px; font-weight: 700; color: #78350f; margin-bottom: 4px; }
+.correctionsBannerText  { font-size: 13px; color: #92400e; line-height: 1.5; }
+.correctionsList { margin: 8px 0 0; padding: 0 0 0 1rem; }
+.correctionsListItem { font-size: 12px; color: #78350f; margin-bottom: 4px; line-height: 1.5; }
+.correctionOriginal { text-decoration: line-through; color: #dc2626; margin-right: 4px; }
+.correctionNew      { color: #16a34a; font-weight: 600; margin-right: 4px; }
+
+/* ── Review Banner (NEEDS_REVIEW) ────────────────────────────────────── */
+.reviewBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.reviewBannerIcon  { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.reviewBannerBody  { flex: 1; }
+.reviewBannerTitle { font-size: 14px; font-weight: 700; color: #991b1b; margin-bottom: 4px; }
+.reviewBannerText  { font-size: 13px; color: #b91c1c; line-height: 1.5; }
+.reviewList { margin: 8px 0 0; padding: 0 0 0 1rem; }
+.reviewListItem { font-size: 12px; color: #991b1b; margin-bottom: 4px; line-height: 1.5; }
 
 /* ── Upload Another button ───────────────────────────────────────────── */
 .uploadAnotherBtn {

@@ -37,6 +37,8 @@ public class RuleBasedQueryParser {
     // Status
     private static final Pattern STATUS_COMPLETED = Pattern.compile(
             "\\b(completed|processed|done|finished)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STATUS_CORRECTED = Pattern.compile(
+            "\\b(corrected|with\\s+corrections?|auto[-\\s]?corrected|fixed)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern STATUS_NEEDS_REVIEW = Pattern.compile(
             "\\b(needs?\\s+review|review|needs?\\s+attention|flagged)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern STATUS_PROCESSING = Pattern.compile(
@@ -73,6 +75,7 @@ public class RuleBasedQueryParser {
             "this", "last", "next", "today", "yesterday",
             "above", "below", "over", "under", "between",
             "completed", "processing", "failed", "pending", "done", "processed", "finished",
+            "corrected", "corrections", "fixed",
             "largest", "biggest", "smallest", "cheapest", "highest", "lowest",
             "recent", "latest", "newest", "oldest", "earliest",
             "january", "february", "march", "april", "may", "june",
@@ -142,7 +145,8 @@ public class RuleBasedQueryParser {
 
         // ── Status ──────────────────────────────────────────────────────────
         // Use "COMPLETED_ANY" as a sentinel meaning COMPLETED + COMPLETED_WITH_CORRECTIONS
-        if (STATUS_COMPLETED.matcher(q).find())     { status = "COMPLETED_ANY"; matched = true; }
+        if (STATUS_CORRECTED.matcher(q).find())          { status = "COMPLETED_WITH_CORRECTIONS"; matched = true; }
+        else if (STATUS_COMPLETED.matcher(q).find())     { status = "COMPLETED_ANY"; matched = true; }
         else if (STATUS_NEEDS_REVIEW.matcher(q).find()) { status = "NEEDS_REVIEW"; matched = true; }
         else if (STATUS_PROCESSING.matcher(q).find())   { status = "PROCESSING";   matched = true; }
         else if (STATUS_FAILED.matcher(q).find())        { status = "FAILED";       matched = true; }

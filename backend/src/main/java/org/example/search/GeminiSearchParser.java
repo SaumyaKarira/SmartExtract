@@ -35,16 +35,17 @@ public class GeminiSearchParser {
               "maxAmount":       number or null,
               "dateFrom":        "YYYY-MM-DD" or null,
               "dateTo":          "YYYY-MM-DD" or null,
-              "status":          "COMPLETED" | "NEEDS_REVIEW" | "PROCESSING" | "FAILED" | null,
+              "status":          "COMPLETED" | "COMPLETED_WITH_CORRECTIONS" | "NEEDS_REVIEW" | "PROCESSING" | "FAILED" | null,
               "sortBy":          "date" | "amount" | "poNumber" | "supplier" | null,
               "sortDir":         "asc" | "desc" | null
             }
 
             Rules:
-            - status must be exactly one of: COMPLETED, NEEDS_REVIEW, PROCESSING, FAILED, or null
-            - Use COMPLETED for: "completed", "done", "processed", "finished"
+            - status must be exactly one of: COMPLETED, COMPLETED_WITH_CORRECTIONS, NEEDS_REVIEW, PROCESSING, FAILED, or null
+            - Use COMPLETED for: "completed", "done", "processed", "finished" (no corrections)
+            - Use COMPLETED_WITH_CORRECTIONS for: "corrected", "with corrections", "auto-corrected", "fixed", "corrected data"
             - Use NEEDS_REVIEW for: "needs review", "flagged", "review required", "needs attention"
-            - Use FAILED for: "failed", "error", "errors"
+            - Use FAILED for: "failed", "error", "errors", "failed data"
             - For amount filters: "above/over/more than X" → minAmount = X; "below/under/less than X" → maxAmount = X
             - For sorting: "largest/biggest/highest" → sortBy = "amount", sortDir = "desc"
             - For sorting: "smallest/lowest/cheapest" → sortBy = "amount", sortDir = "asc"
@@ -125,6 +126,7 @@ public class GeminiSearchParser {
             if (s == null) return null;
             return switch (s.toUpperCase()) {
                 case "COMPLETED", "PROCESSED", "DONE", "FINISHED" -> "COMPLETED_ANY";
+                case "COMPLETED_WITH_CORRECTIONS", "CORRECTED", "FIXED", "WITH_CORRECTIONS" -> "COMPLETED_WITH_CORRECTIONS";
                 case "NEEDS_REVIEW", "REVIEW", "FLAGGED"           -> "NEEDS_REVIEW";
                 case "PROCESSING", "PENDING"                        -> "PROCESSING";
                 case "FAILED", "ERROR"                              -> "FAILED";

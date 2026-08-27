@@ -164,11 +164,12 @@ public class PurchaseOrderSearchService {
         else if (q.dateTo() != null)     parts.add("date up to " + q.dateTo());
         if (q.status() != null) {
             String statusLabel = switch (q.status()) {
-                case "COMPLETED_ANY" -> "Completed";
-                case "NEEDS_REVIEW"  -> "Needs Review";
-                case "FAILED"        -> "Failed";
-                case "PROCESSING"    -> "Processing";
-                default              -> q.status();
+                case "COMPLETED_ANY"              -> "Completed";
+                case "COMPLETED_WITH_CORRECTIONS" -> "Completed with Corrections";
+                case "NEEDS_REVIEW"               -> "Needs Review";
+                case "FAILED"                     -> "Failed";
+                case "PROCESSING"                 -> "Processing";
+                default                           -> q.status();
             };
             parts.add("status = " + statusLabel);
         }

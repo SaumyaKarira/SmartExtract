@@ -15,6 +15,7 @@ interface PurchaseOrder {
   orderDate: string | null;
   paymentTerms: string | null;
   total: number | null;
+  status: string | null;
   createdAt: string;
 }
 
@@ -153,6 +154,7 @@ export default function PurchaseOrdersPage() {
   );
 
   return (
+    <>
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <div>
@@ -261,7 +263,7 @@ export default function PurchaseOrdersPage() {
                     <th className={`${styles.th} ${styles.thRight}`}>
                       <button className={styles.sortBtn} onClick={() => handleSort('total')}>Total Amount {sortIcon('total')}</button>
                     </th>
-                    <th className={styles.th} />
+                    <th className={styles.th}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -275,6 +277,7 @@ export default function PurchaseOrdersPage() {
                       <td className={styles.td}><span className={styles.supplier}>{po.supplier ?? '—'}</span></td>
                       <td className={styles.td}><span className={styles.date}>{fmtDate(po.orderDate)}</span></td>
                       <td className={`${styles.td} ${styles.tdRight}`}><span className={styles.total}>{fmtCurrency(po.total)}</span></td>
+                      <td className={styles.td}>{po.status ? <StatusBadge status={po.status} /> : '—'}</td>
                       <td className={`${styles.td} ${styles.tdAction}`} onClick={e => e.stopPropagation()}>
                         <button
                           className={styles.deleteRowBtn}
@@ -320,5 +323,6 @@ export default function PurchaseOrdersPage() {
         }}
       />
     )}
+  </>
   );
 }

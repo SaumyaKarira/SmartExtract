@@ -66,12 +66,15 @@ export default function SettingsPage() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
 
-  // Password state
+  const initials =
+    (user?.name ?? '')
     .split(' ')
     .map((n) => n[0])
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'U';
+
+  // Password state
 
   const handleSaveProfile = async () => {
     setProfileError('');

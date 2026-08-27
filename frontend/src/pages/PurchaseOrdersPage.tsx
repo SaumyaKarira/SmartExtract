@@ -7,7 +7,7 @@ import DeleteDocumentModal from '../components/DeleteDocumentModal';
 const PAGE_SIZE = 10;
 
 interface PurchaseOrder {
-  id: number;
+  id: number | null;
   documentId: number;
   fileName: string;
   poNumber: string | null;
@@ -17,6 +17,8 @@ interface PurchaseOrder {
   total: number | null;
   status: string | null;
   createdAt: string;
+  retryable: boolean | null;
+  errorMessage: string | null;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -67,6 +69,13 @@ const ChevronDownIcon = () => (
   </svg>
 );
 
+const RetryIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="1 4 1 10 7 10"/>
+    <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+  </svg>
+);
+
 const fmtCurrency = (val: number | null) =>
   val != null
     ? `₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -90,7 +99,9 @@ export default function PurchaseOrdersPage() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ documentId: number; fileName: string; poId: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ documentId: number; fileName: string; poId: number | null } | null>(null);
+  const [retryingDocId, setRetryingDocId] = useState<number | null>(null);
+  const [retryErrors, setRetryErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -121,6 +132,30 @@ export default function PurchaseOrdersPage() {
     } finally {
       setExportLoading(false);
     }
+  };
+
+  const handleRetry = (documentId: number) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.docx';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setRetryingDocId(documentId);
+      setRetryErrors(prev => { const n = { ...prev }; delete n[documentId]; return n; });
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        await api.postForm(`/api/documents/${documentId}/retry`, formData);
+        const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
+        setPos(data);
+      } catch (err) {
+        setRetryErrors(prev => ({ ...prev, [documentId]: err instanceof Error ? err.message : 'Retry failed.' }));
+      } finally {
+        setRetryingDocId(null);
+      }
+    };
+    input.click();
   };
 
   useEffect(() => {
@@ -273,29 +308,79 @@ export default function PurchaseOrdersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginated.map(po => (
-                    <tr
-                      key={po.id}
-                      className={styles.tr}
-                      onClick={() => navigate(`/dashboard/po/${po.id}`, { state: { from: 'po-list' } })}
-                    >
-                      <td className={styles.td}><span className={styles.poNumber}>{po.poNumber ?? '—'}</span></td>
-                      <td className={styles.td}><span className={styles.supplier}>{po.supplier ?? '—'}</span></td>
-                      <td className={styles.td}><span className={styles.date}>{fmtDate(po.orderDate)}</span></td>
-                      <td className={`${styles.td} ${styles.tdRight}`}><span className={styles.total}>{fmtCurrency(po.total)}</span></td>
-                      <td className={styles.td}>{po.status ? <StatusBadge status={po.status} /> : '—'}</td>
-                      <td className={`${styles.td} ${styles.tdAction}`} onClick={e => e.stopPropagation()}>
-                        <button
-                          className={styles.deleteRowBtn}
-                          title={`Delete ${po.fileName ?? 'document'}`}
-                          aria-label={`Delete ${po.fileName ?? 'document'}`}
-                          onClick={() => setDeleteTarget({ documentId: po.documentId, fileName: po.fileName, poId: po.id })}
-                        >
-                          <TrashIcon />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {paginated.map(po => {
+                    const isFailed = po.id == null;
+                    const rowKey = po.id != null ? `po-${po.id}` : `doc-${po.documentId}`;
+
+                    if (isFailed) {
+                      return (
+                        <tr key={rowKey} className={styles.trFailedOuter}>
+                          <td colSpan={6} className={styles.tdFailedCell}>
+                            <div className={styles.failedCard}>
+                              <div className={styles.failedCardLeft}>
+                                <span className={styles.failedFileIcon}>📄</span>
+                                <div className={styles.failedCardBody}>
+                                  <span className={styles.failedFileName}>{po.fileName}</span>
+                                  {po.errorMessage && (
+                                    <span className={styles.failedErrorMsg}>{po.errorMessage}</span>
+                                  )}
+                                  {retryErrors[po.documentId] && (
+                                    <span className={styles.failedRetryError}>{retryErrors[po.documentId]}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className={styles.failedCardRight}>
+                                <span className={`${styles.badge} ${styles.badgeFailed}`}>✕ Failed</span>
+                                {po.retryable && (
+                                  <button
+                                    className={styles.retryBtn}
+                                    disabled={retryingDocId === po.documentId}
+                                    onClick={() => handleRetry(po.documentId)}
+                                    title="Re-upload and reprocess this document"
+                                  >
+                                    <RetryIcon />
+                                    {retryingDocId === po.documentId ? 'Retrying…' : 'Retry'}
+                                  </button>
+                                )}
+                                <button
+                                  className={styles.deleteRowBtn}
+                                  title={`Delete ${po.fileName}`}
+                                  aria-label={`Delete ${po.fileName}`}
+                                  onClick={() => setDeleteTarget({ documentId: po.documentId, fileName: po.fileName, poId: null })}
+                                >
+                                  <TrashIcon />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return (
+                      <tr
+                        key={rowKey}
+                        className={styles.tr}
+                        onClick={() => navigate(`/dashboard/po/${po.id}`, { state: { from: 'po-list' } })}
+                      >
+                        <td className={styles.td}><span className={styles.poNumber}>{po.poNumber ?? '—'}</span></td>
+                        <td className={styles.td}><span className={styles.supplier}>{po.supplier ?? '—'}</span></td>
+                        <td className={styles.td}><span className={styles.date}>{fmtDate(po.orderDate)}</span></td>
+                        <td className={`${styles.td} ${styles.tdRight}`}><span className={styles.total}>{fmtCurrency(po.total)}</span></td>
+                        <td className={styles.td}>{po.status ? <StatusBadge status={po.status} /> : '—'}</td>
+                        <td className={`${styles.td} ${styles.tdAction}`} onClick={e => e.stopPropagation()}>
+                          <button
+                            className={styles.deleteRowBtn}
+                            title={`Delete ${po.fileName ?? 'document'}`}
+                            aria-label={`Delete ${po.fileName ?? 'document'}`}
+                            onClick={() => setDeleteTarget({ documentId: po.documentId, fileName: po.fileName, poId: po.id })}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -323,7 +408,9 @@ export default function PurchaseOrdersPage() {
         documentName={deleteTarget.fileName}
         onCancel={() => setDeleteTarget(null)}
         onDeleted={() => {
-          setPos(prev => prev.filter(p => p.id !== deleteTarget.poId));
+          setPos(prev => prev.filter(p =>
+            deleteTarget.poId != null ? p.id !== deleteTarget.poId : p.documentId !== deleteTarget.documentId
+          ));
           setDeleteTarget(null);
         }}
       />

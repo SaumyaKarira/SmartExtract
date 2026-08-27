@@ -70,7 +70,7 @@ public class DocumentService {
 
     public List<DocumentResponse> getByUser(Long userId) {
         return documentRepository.findByUserId(userId).stream()
-                .map(doc -> toResponse(doc, null, null, null, false))
+                .map(doc -> toResponse(doc, null, null, null, false, false))
                 .toList();
     }
 
@@ -120,16 +120,52 @@ public class DocumentService {
         log.debug("Upload validation passed: userId={} fileName={} detectedType={} sizeBytes={}",
                 userId, originalName, detectedContentType, fileBytes.length);
 
-        // 2. Duplicate check
+        // 2. Duplicate check — behaviour depends on the existing document's status
         Optional<Document> existing = documentRepository.findByUserIdAndFileHash(userId, fileHash);
         if (existing.isPresent()) {
             Document existingDoc = existing.get();
             Long existingPoId = existingDoc.getPurchaseOrder() != null
                     ? existingDoc.getPurchaseOrder().getId() : null;
-            log.info("Duplicate upload detected: userId={} fileName={} existingDocId={} existingPoId={} elapsedMs={}",
-                    userId, originalName, existingDoc.getId(), existingPoId,
+            DocumentStatus existingStatus = existingDoc.getStatus();
+            log.info("Duplicate upload detected: userId={} fileName={} existingDocId={} existingStatus={} existingPoId={} elapsedMs={}",
+                    userId, originalName, existingDoc.getId(), existingStatus, existingPoId,
                     System.currentTimeMillis() - uploadStart);
-            return toResponse(existingDoc, null, null, existingPoId, true);
+
+            switch (existingStatus) {
+                case COMPLETED, COMPLETED_WITH_CORRECTIONS -> {
+                    // Successfully processed — reject as duplicate
+                    return toResponse(existingDoc, null, null, existingPoId, true, false);
+                }
+                case NEEDS_REVIEW -> {
+                    // Awaiting review — keep existing record, no duplicate creation
+                    return toResponse(existingDoc, null, null, existingPoId, true, false);
+                }
+                case PROCESSING -> {
+                    // Already in flight — report processing in progress
+                    return toResponse(existingDoc, null, null, existingPoId, true, false);
+                }
+                case FAILED -> {
+                    if (existingDoc.isRetryable()) {
+                        // Retryable failure — reprocess the EXISTING document record
+                        // Guard against concurrent retries
+                        existingDoc.setStatus(DocumentStatus.PROCESSING);
+                        existingDoc.setRetryable(false);
+                        existingDoc.setErrorMessage(null);
+                        Document resetDoc = documentRepository.save(existingDoc);
+                        log.info("Retryable duplicate: resetting docId={} to PROCESSING for reprocessing", resetDoc.getId());
+                        String extractedText = extractTextOrThrow(fileBytes, userId, originalName);
+                        User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                        return processDocument(resetDoc, extractedText, user, uploadStart, true);
+                    } else {
+                        // Permanent failure — reject as unprocessable duplicate
+                        return toResponse(existingDoc, null, null, existingPoId, true, false);
+                    }
+                }
+                default -> {
+                    return toResponse(existingDoc, null, null, existingPoId, true, false);
+                }
+            }
         }
 
         // 3. Extract text (still validation — no DB record yet)
@@ -152,7 +188,7 @@ public class DocumentService {
         log.info("Document record created: docId={} userId={} fileName={} fileType={}",
                 doc.getId(), userId, doc.getFileName(), doc.getFileType());
 
-        return processDocument(doc, extractedText, user, uploadStart);
+        return processDocument(doc, extractedText, user, uploadStart, false);
     }
 
     // -------------------------------------------------------------------------
@@ -204,14 +240,14 @@ public class DocumentService {
         log.info("Retry: document reset to PROCESSING: docId={} userId={}", doc.getId(), userId);
 
         User user = doc.getUser();
-        return processDocument(doc, extractedText, user, retryStart);
+        return processDocument(doc, extractedText, user, retryStart, false);
     }
 
     // -------------------------------------------------------------------------
     // Shared processing pipeline: text extraction → Gemini → validation → DB
     // -------------------------------------------------------------------------
 
-    private DocumentResponse processDocument(Document doc, String extractedText, User user, long pipelineStartMs) {
+    private DocumentResponse processDocument(Document doc, String extractedText, User user, long pipelineStartMs, boolean isRetryProcessing) {
         long docId = doc.getId();
         long userId = user.getId();
 
@@ -236,7 +272,7 @@ public class DocumentService {
             String userMsg = retryable
                     ? "AI extraction failed due to a temporary service issue. Please retry."
                     : "AI could not extract structured data from this document. It may be a scanned image or an unsupported format.";
-            DocumentResponse resp = failDocument(doc, retryable, userMsg, extractedText);
+            DocumentResponse resp = failDocument(doc, retryable, userMsg, extractedText, isRetryProcessing);
             log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable={} totalDurationMs={}",
                     docId, userId, retryable, System.currentTimeMillis() - pipelineStartMs);
             return resp;
@@ -254,7 +290,7 @@ public class DocumentService {
             } catch (Exception e) {
             log.error("Validation service error: docId={} userId={} exceptionClass={} message={}",
                     docId, userId, e.getClass().getName(), e.getMessage(), e);
-            DocumentResponse resp = failDocument(doc, true, "A temporary error occurred during validation. Please retry.");
+            DocumentResponse resp = failDocument(doc, true, "A temporary error occurred during validation. Please retry.", isRetryProcessing);
             log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable=true totalDurationMs={}",
                     docId, userId, System.currentTimeMillis() - pipelineStartMs);
             return resp;
@@ -329,11 +365,11 @@ public class DocumentService {
                     docId, userId, validationResult.outcome(), savedPo.getId(),
                     po.getItems().size(), System.currentTimeMillis() - pipelineStartMs);
 
-            return toResponse(doc, extractedText, extractedPO, savedPo.getId(), false);
+            return toResponse(doc, extractedText, extractedPO, savedPo.getId(), false, isRetryProcessing);
             } catch (Exception e) {
             log.error("Purchase order persistence failed: docId={} userId={} exceptionClass={} message={}",
                     docId, userId, e.getClass().getName(), e.getMessage(), e);
-            DocumentResponse resp = failDocument(doc, true, "A temporary error occurred while saving the purchase order. Please retry.");
+            DocumentResponse resp = failDocument(doc, true, "A temporary error occurred while saving the purchase order. Please retry.", isRetryProcessing);
             log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable=true totalDurationMs={}",
                     docId, userId, System.currentTimeMillis() - pipelineStartMs);
             return resp;
@@ -490,15 +526,19 @@ public class DocumentService {
     }
 
     private DocumentResponse failDocument(Document doc, boolean retryable, String userMessage) {
-        return failDocument(doc, retryable, userMessage, null);
+        return failDocument(doc, retryable, userMessage, null, false);
     }
 
-    private DocumentResponse failDocument(Document doc, boolean retryable, String userMessage, String extractedText) {
+    private DocumentResponse failDocument(Document doc, boolean retryable, String userMessage, boolean isRetryProcessing) {
+        return failDocument(doc, retryable, userMessage, null, isRetryProcessing);
+    }
+
+    private DocumentResponse failDocument(Document doc, boolean retryable, String userMessage, String extractedText, boolean isRetryProcessing) {
         doc.setStatus(DocumentStatus.FAILED);
         doc.setRetryable(retryable);
         doc.setErrorMessage(userMessage);
         documentRepository.save(doc);
-        return toResponse(doc, extractedText, null, null, false);
+        return toResponse(doc, extractedText, null, null, false, isRetryProcessing);
     }
 
     private String toJson(Object value) {
@@ -543,7 +583,7 @@ public class DocumentService {
     }
 
     private DocumentResponse toResponse(Document doc, String extractedText, ExtractedPurchaseOrder extractedPO,
-                                         Long purchaseOrderId, boolean duplicate) {
+                                         Long purchaseOrderId, boolean duplicate, boolean retryProcessing) {
         return new DocumentResponse(
                 doc.getId(),
                 doc.getUser().getId(),
@@ -556,7 +596,8 @@ public class DocumentService {
                 extractedPO,
                 duplicate,
                 doc.isRetryable(),
-                doc.getErrorMessage()
+                doc.getErrorMessage(),
+                retryProcessing
         );
     }
 }

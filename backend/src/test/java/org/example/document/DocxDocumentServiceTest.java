@@ -99,7 +99,7 @@ class DocxDocumentServiceTest {
         when(documentRepository.save(any(Document.class))).thenReturn(savedDoc);
 
         ExtractedPurchaseOrder extracted = new ExtractedPurchaseOrder(
-                "12345", "ACME Corp", null, null, 500.0, null);
+                "12345", "ACME Corp", null, null, null, null, 500.0, null, null, List.of());
         when(llmExtractionService.extract(anyString())).thenReturn(extracted);
 
         when(poValidationService.validate(extracted)).thenReturn(
@@ -142,7 +142,7 @@ class DocxDocumentServiceTest {
         when(documentRepository.save(any(Document.class))).thenReturn(savedDoc);
 
         ExtractedPurchaseOrder extracted = new ExtractedPurchaseOrder(
-                "99", "Widgets Inc", null, null, 1200.0, null);
+                "99", "Widgets Inc", null, null, null, null, 1200.0, null, null, List.of());
         when(llmExtractionService.extract(anyString())).thenReturn(extracted);
 
         when(poValidationService.validate(extracted)).thenReturn(

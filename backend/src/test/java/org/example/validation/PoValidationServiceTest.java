@@ -25,7 +25,7 @@ class PoValidationServiceTest {
     private static ExtractedPurchaseOrder po(String poNum, String vendor, String date,
                                               Double total,
                                               List<ExtractedPurchaseOrder.ExtractedLineItem> items) {
-        return new ExtractedPurchaseOrder(poNum, vendor, date, "Net 30", total, items);
+        return new ExtractedPurchaseOrder(poNum, vendor, date, null, "Net 30", null, null, null, total, items);
     }
 
     // ── COMPLETED ─────────────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ class PoValidationServiceTest {
     void completed_whenOptionalFieldsMissing() {
         // paymentTerms, currency, deliveryDate, subtotal, tax, totalAmount all null
         var extracted = new ExtractedPurchaseOrder("PO-001", "ACME", "2024-01-15",
-                null, null, List.of());
+                null, null, null, null, null, null, List.of());
         var result = svc.validate(extracted);
 
         assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED);

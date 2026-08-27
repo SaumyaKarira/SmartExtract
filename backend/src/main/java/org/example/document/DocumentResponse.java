@@ -16,5 +16,6 @@ public record DocumentResponse(
         ExtractedPurchaseOrder extractedPurchaseOrder,
         boolean duplicate,
         boolean retryable,
-        String errorMessage
+        String errorMessage,
+        boolean retryProcessing
 ) {}

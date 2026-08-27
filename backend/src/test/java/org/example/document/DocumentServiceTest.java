@@ -399,6 +399,153 @@ class DocumentServiceTest {
     }
 
     // -------------------------------------------------------------------------
+    // Duplicate handling based on status (5 required tests)
+    // -------------------------------------------------------------------------
+
+    /** 1. failed retryable → same file upload → reprocessing succeeds */
+    @Test
+    void upload_retryableFailedDocument_sameFile_reprocessesSuccessfully() throws Exception {
+        byte[] pdfBytes = createMinimalPdf("Purchase order content for retry");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "po.pdf", "application/pdf", pdfBytes);
+
+        Document existing = makeDoc(10L, testUser, DocumentStatus.FAILED);
+        existing.setRetryable(true);
+        existing.setFileHash("will-be-matched");
+
+        when(documentRepository.findByUserIdAndFileHash(eq(1L), anyString()))
+                .thenReturn(Optional.of(existing));
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+
+        ExtractedPurchaseOrder extractedPO = new ExtractedPurchaseOrder(
+                "PO-001", "Supplier", "2025-01-01", "2025-02-01", "Net30", "USD",
+                100.0, 10.0, 110.0, List.of());
+        when(llmExtractionService.extract(anyString())).thenReturn(extractedPO);
+
+        ValidationResult validationResult = new ValidationResult(
+                DocumentStatus.COMPLETED, List.of(), List.of());
+        when(poValidationService.validate(any())).thenReturn(validationResult);
+
+        PurchaseOrder savedPo = new PurchaseOrder();
+        savedPo.setId(55L);
+        when(purchaseOrderRepository.save(any())).thenReturn(savedPo);
+
+        DocumentResponse response = documentService.upload(file, 1L);
+
+        // Same document record reused — not a new duplicate
+        assertThat(response.duplicate()).isFalse();
+        assertThat(response.retryProcessing()).isTrue();
+        assertThat(response.id()).isEqualTo(10L);
+        assertThat(response.status()).isEqualTo(DocumentStatus.COMPLETED);
+        // Verify no second document was created (save only called for the existing one)
+        verify(documentRepository, never()).save(argThat(d -> !d.getId().equals(10L)));
+    }
+
+    /** 2. failed non-retryable → same file → rejected as duplicate */
+    @Test
+    void upload_nonRetryableFailedDocument_sameFile_rejectedAsDuplicate() throws IOException {
+        byte[] pdfBytes = createMinimalPdf("Purchase order content");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "po.pdf", "application/pdf", pdfBytes);
+
+        Document existing = makeDoc(20L, testUser, DocumentStatus.FAILED);
+        existing.setRetryable(false);
+
+        when(documentRepository.findByUserIdAndFileHash(eq(1L), anyString()))
+                .thenReturn(Optional.of(existing));
+
+        DocumentResponse response = documentService.upload(file, 1L);
+
+        assertThat(response.duplicate()).isTrue();
+        assertThat(response.retryProcessing()).isFalse();
+        assertThat(response.id()).isEqualTo(20L);
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(llmExtractionService);
+    }
+
+    /** 3. completed document → same file → rejected as duplicate */
+    @Test
+    void upload_completedDocument_sameFile_rejectedAsDuplicate() throws IOException {
+        byte[] pdfBytes = createMinimalPdf("Purchase order content");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "po.pdf", "application/pdf", pdfBytes);
+
+        Document existing = makeDoc(30L, testUser, DocumentStatus.COMPLETED);
+
+        when(documentRepository.findByUserIdAndFileHash(eq(1L), anyString()))
+                .thenReturn(Optional.of(existing));
+
+        DocumentResponse response = documentService.upload(file, 1L);
+
+        assertThat(response.duplicate()).isTrue();
+        assertThat(response.retryProcessing()).isFalse();
+        verifyNoInteractions(llmExtractionService);
+    }
+
+    /** 4. processing document → same file → no second processing started */
+    @Test
+    void upload_processingDocument_sameFile_noSecondProcessing() throws IOException {
+        byte[] pdfBytes = createMinimalPdf("Purchase order content");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "po.pdf", "application/pdf", pdfBytes);
+
+        Document existing = makeDoc(40L, testUser, DocumentStatus.PROCESSING);
+
+        when(documentRepository.findByUserIdAndFileHash(eq(1L), anyString()))
+                .thenReturn(Optional.of(existing));
+
+        DocumentResponse response = documentService.upload(file, 1L);
+
+        assertThat(response.duplicate()).isTrue();
+        assertThat(response.retryProcessing()).isFalse();
+        assertThat(response.status()).isEqualTo(DocumentStatus.PROCESSING);
+        verifyNoInteractions(llmExtractionService);
+        verify(documentRepository, never()).save(any());
+    }
+
+    /** 5. retry succeeds → only one document/PO exists */
+    @Test
+    void upload_retryableFailure_retrySucceeds_onlyOneDocumentAndPoExist() throws Exception {
+        byte[] pdfBytes = createMinimalPdf("Purchase order content unique retry test");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "po.pdf", "application/pdf", pdfBytes);
+
+        Document existing = makeDoc(50L, testUser, DocumentStatus.FAILED);
+        existing.setRetryable(true);
+        existing.setFileHash("hash-match");
+
+        when(documentRepository.findByUserIdAndFileHash(eq(1L), anyString()))
+                .thenReturn(Optional.of(existing));
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+
+        ExtractedPurchaseOrder extractedPO = new ExtractedPurchaseOrder(
+                "PO-999", "Vendor", "2025-03-01", "2025-04-01", "Net60", "EUR",
+                200.0, 20.0, 220.0, List.of());
+        when(llmExtractionService.extract(anyString())).thenReturn(extractedPO);
+
+        ValidationResult validationResult = new ValidationResult(
+                DocumentStatus.COMPLETED, List.of(), List.of());
+        when(poValidationService.validate(any())).thenReturn(validationResult);
+
+        PurchaseOrder savedPo = new PurchaseOrder();
+        savedPo.setId(77L);
+        when(purchaseOrderRepository.save(any())).thenReturn(savedPo);
+
+        DocumentResponse response = documentService.upload(file, 1L);
+
+        // Exactly one document record (id=50) and one PO (id=77)
+        assertThat(response.id()).isEqualTo(50L);
+        assertThat(response.purchaseOrderId()).isEqualTo(77L);
+        assertThat(response.retryProcessing()).isTrue();
+        // purchaseOrderRepository.save called exactly once
+        verify(purchaseOrderRepository, times(1)).save(any());
+        // No new document was inserted (save only called for existing doc)
+        verify(documentRepository, never()).save(argThat(d -> d.getId() == null));
+    }
+
+    // -------------------------------------------------------------------------
     // Helper: create a minimal valid PDF with extractable text
     // -------------------------------------------------------------------------
 

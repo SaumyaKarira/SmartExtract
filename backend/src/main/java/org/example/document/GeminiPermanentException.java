@@ -12,6 +12,10 @@ package org.example.document;
  */
 public class GeminiPermanentException extends RuntimeException {
 
+    public GeminiPermanentException(String message) {
+        super(message);
+    }
+
     public GeminiPermanentException(String message, Throwable cause) {
         super(message, cause);
     }

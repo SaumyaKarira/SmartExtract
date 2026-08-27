@@ -4,13 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import styles from './SettingsPage.module.css';
 
-type Section = 'profile' | 'account' | 'preferences';
+type Section = 'profile' | 'account';
 
 function SectionNav({ active, onChange }: { active: Section; onChange: (s: Section) => void }) {
   const items: { id: Section; label: string; icon: string }[] = [
     { id: 'profile', label: 'Profile', icon: '👤' },
     { id: 'account', label: 'Account', icon: '🔐' },
-    { id: 'preferences', label: 'Preferences', icon: '🔔' },
   ];
   return (
     <nav className={styles.sectionNav}>
@@ -67,11 +66,7 @@ export default function SettingsPage() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
 
-  // Preferences (UI-only — no backend yet)
-  const [emailNotifs, setEmailNotifs] = useState(true);
-  const [processingNotifs, setProcessingNotifs] = useState(true);
-
-  const initials = name
+  // Password state
     .split(' ')
     .map((n) => n[0])
     .join('')
@@ -238,8 +233,12 @@ export default function SettingsPage() {
                           disabled={passLoading}
                         />
                         <button type="button" className={styles.passToggle}
-                          onClick={() => setShowCurrent(v => !v)}>
-                          {showCurrent ? '🙈' : '👁'}
+                          onClick={() => setShowCurrent(v => !v)}
+                          aria-label={showCurrent ? 'Hide password' : 'Show password'}>
+                          {showCurrent
+                            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          }
                         </button>
                       </div>
                     </div>
@@ -255,8 +254,12 @@ export default function SettingsPage() {
                           disabled={passLoading}
                         />
                         <button type="button" className={styles.passToggle}
-                          onClick={() => setShowNew(v => !v)}>
-                          {showNew ? '🙈' : '👁'}
+                          onClick={() => setShowNew(v => !v)}
+                          aria-label={showNew ? 'Hide password' : 'Show password'}>
+                          {showNew
+                            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          }
                         </button>
                       </div>
                     </div>
@@ -300,58 +303,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* ── PREFERENCES ── */}
-          {section === 'preferences' && (
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>Preferences</h2>
-                <p className={styles.cardDesc}>Manage notifications and app behaviour.</p>
-              </div>
-
-              <div className={styles.prefList}>
-                <div className={styles.prefItem}>
-                  <div className={styles.prefText}>
-                    <p className={styles.prefTitle}>Email notifications</p>
-                    <p className={styles.prefDesc}>Receive a summary email when POs are processed or fail.</p>
-                  </div>
-                  <button
-                    className={`${styles.toggle} ${emailNotifs ? styles.toggleOn : ''}`}
-                    onClick={() => setEmailNotifs(v => !v)}
-                    aria-label="Toggle email notifications"
-                    role="switch"
-                    aria-checked={emailNotifs}
-                  >
-                    <span className={styles.toggleThumb} />
-                  </button>
-                </div>
-
-                <div className={styles.divider} />
-
-                <div className={styles.prefItem}>
-                  <div className={styles.prefText}>
-                    <p className={styles.prefTitle}>Processing notifications</p>
-                    <p className={styles.prefDesc}>Get an in-app alert when a document finishes AI extraction.</p>
-                  </div>
-                  <button
-                    className={`${styles.toggle} ${processingNotifs ? styles.toggleOn : ''}`}
-                    onClick={() => setProcessingNotifs(v => !v)}
-                    aria-label="Toggle processing notifications"
-                    role="switch"
-                    aria-checked={processingNotifs}
-                  >
-                    <span className={styles.toggleThumb} />
-                  </button>
-                </div>
-              </div>
-
-              <div className={styles.divider} />
-              <div className={styles.prefActions}>
-                <button className={styles.primaryBtn} onClick={() => showToast('Preferences saved.')}>
-                  Save Preferences
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

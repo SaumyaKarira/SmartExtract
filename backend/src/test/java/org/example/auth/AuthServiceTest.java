@@ -70,6 +70,9 @@ class AuthServiceTest {
         LoginResponse response = authService.login(new LoginRequest("test@example.com", "correctpass"));
 
         assertThat(response.token()).isEqualTo("jwt-token");
+        // Login response now includes authoritative name and email from the database
+        assertThat(response.name()).isEqualTo("Test User");
+        assertThat(response.email()).isEqualTo("test@example.com");
     }
 
     @Test

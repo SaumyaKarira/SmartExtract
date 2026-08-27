@@ -75,15 +75,50 @@ public class DocumentService {
     }
 
     // -------------------------------------------------------------------------
+    // Delete
+    // -------------------------------------------------------------------------
+
+    @Transactional
+    public void deleteDocument(Long documentId, Long userId) {
+        log.info("Delete requested: docId={} userId={}", documentId, userId);
+
+        Document doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> {
+                    log.warn("Delete failed — document not found: docId={} userId={}", documentId, userId);
+                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found.");
+                });
+
+        // Ownership check — never trust userId from the request body
+        if (!doc.getUser().getId().equals(userId)) {
+            log.warn("Delete rejected — unauthorized: docId={} requestingUserId={}", documentId, userId);
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You are not authorised to delete this document.");
+        }
+
+        // CascadeType.ALL on Document.purchaseOrder and PurchaseOrder.items means
+        // deleting the Document automatically deletes the PO and all its items.
+        // Everything runs inside the @Transactional boundary — nothing is partially deleted.
+        documentRepository.delete(doc);
+        log.info("Delete succeeded: docId={} userId={}", documentId, userId);
+    }
+
+    // -------------------------------------------------------------------------
     // Upload
     // -------------------------------------------------------------------------
 
     @Transactional
     public DocumentResponse upload(MultipartFile file, Long userId) {
+        long uploadStart = System.currentTimeMillis();
+        String originalName = file != null ? file.getOriginalFilename() : null;
+        log.info("Upload started: userId={} fileName={} declaredSize={}",
+                userId, originalName, file != null ? file.getSize() : 0);
+
         // 1. Validate before creating any DB record
         byte[] fileBytes = validateAndReadBytes(file);
         String fileHash = sha256Hex(fileBytes);
         String detectedContentType = detectFileType(file);
+        log.debug("Upload validation passed: userId={} fileName={} detectedType={} sizeBytes={}",
+                userId, originalName, detectedContentType, fileBytes.length);
 
         // 2. Duplicate check
         Optional<Document> existing = documentRepository.findByUserIdAndFileHash(userId, fileHash);
@@ -91,11 +126,14 @@ public class DocumentService {
             Document existingDoc = existing.get();
             Long existingPoId = existingDoc.getPurchaseOrder() != null
                     ? existingDoc.getPurchaseOrder().getId() : null;
+            log.info("Duplicate upload detected: userId={} fileName={} existingDocId={} existingPoId={} elapsedMs={}",
+                    userId, originalName, existingDoc.getId(), existingPoId,
+                    System.currentTimeMillis() - uploadStart);
             return toResponse(existingDoc, null, null, existingPoId, true);
         }
 
         // 3. Extract text (still validation — no DB record yet)
-        String extractedText = extractTextOrThrow(fileBytes);
+        String extractedText = extractTextOrThrow(fileBytes, userId, originalName);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
@@ -111,8 +149,10 @@ public class DocumentService {
         doc.setUploadedAt(LocalDateTime.now());
         doc.setFileHash(fileHash);
         doc = documentRepository.save(doc);
+        log.info("Document record created: docId={} userId={} fileName={} fileType={}",
+                doc.getId(), userId, doc.getFileName(), doc.getFileType());
 
-        return processDocument(doc, extractedText, user);
+        return processDocument(doc, extractedText, user, uploadStart);
     }
 
     // -------------------------------------------------------------------------
@@ -121,6 +161,9 @@ public class DocumentService {
 
     @Transactional
     public DocumentResponse retry(Long documentId, Long userId, MultipartFile file) {
+        long retryStart = System.currentTimeMillis();
+        log.info("Retry started: docId={} userId={}", documentId, userId);
+
         Document doc = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found"));
 
@@ -151,48 +194,69 @@ public class DocumentService {
                     "The uploaded file does not match the original document. Please upload the same file.");
         }
 
-        String extractedText = extractTextOrThrow(fileBytes);
+        String extractedText = extractTextOrThrow(fileBytes, userId, doc.getFileName());
 
         // Reset state to PROCESSING
         doc.setStatus(DocumentStatus.PROCESSING);
         doc.setRetryable(false);
         doc.setErrorMessage(null);
         doc = documentRepository.save(doc);
+        log.info("Retry: document reset to PROCESSING: docId={} userId={}", doc.getId(), userId);
 
         User user = doc.getUser();
-        return processDocument(doc, extractedText, user);
+        return processDocument(doc, extractedText, user, retryStart);
     }
 
     // -------------------------------------------------------------------------
-    // Shared processing pipeline: PDF → PDFBox → Gemini → validation → DB
+    // Shared processing pipeline: text extraction → Gemini → validation → DB
     // -------------------------------------------------------------------------
 
-    private DocumentResponse processDocument(Document doc, String extractedText, User user) {
+    private DocumentResponse processDocument(Document doc, String extractedText, User user, long pipelineStartMs) {
+        long docId = doc.getId();
+        long userId = user.getId();
+
+        // ── Gemini extraction ─────────────────────────────────────────────────
+        log.info("Gemini extraction starting: docId={} userId={}", docId, userId);
+        long geminiStart = System.currentTimeMillis();
         ExtractedPurchaseOrder extractedPO;
         try {
             extractedPO = llmExtractionService.extract(extractedText);
+            log.info("Gemini extraction succeeded: docId={} userId={} durationMs={}",
+                    docId, userId, System.currentTimeMillis() - geminiStart);
         } catch (Exception e) {
-            log.error("Gemini extraction failed for document {}: {}", doc.getId(), e.getMessage(), e);
+            long geminiMs = System.currentTimeMillis() - geminiStart;
             boolean retryable = isRetryableException(e);
+            log.error("Gemini extraction failed: docId={} userId={} retryable={} durationMs={} exceptionClass={}",
+                    docId, userId, retryable, geminiMs, e.getClass().getSimpleName());
             String userMsg = retryable
                     ? "AI extraction failed due to a temporary service issue. Please retry."
                     : "AI could not extract structured data from this document. It may be a scanned image or an unsupported format.";
-            return failDocument(doc, retryable, userMsg);
+            DocumentResponse resp = failDocument(doc, retryable, userMsg);
+            log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable={} totalDurationMs={}",
+                    docId, userId, retryable, System.currentTimeMillis() - pipelineStartMs);
+            return resp;
         }
 
         // ── Deterministic validation ──────────────────────────────────────────
+        log.debug("Validation starting: docId={} userId={}", docId, userId);
         ValidationResult validationResult;
         try {
             validationResult = poValidationService.validate(extractedPO);
+            log.info("Validation outcome: docId={} userId={} outcome={} corrections={} reviewReasons={}",
+                    docId, userId, validationResult.outcome(),
+                    validationResult.corrections().size(),
+                    validationResult.reviewReasons().size());
         } catch (Exception e) {
-            log.error("Validation service threw unexpectedly for document {}: {}", doc.getId(), e.getMessage(), e);
-            // Treat as a retryable infrastructure failure
-            return failDocument(doc, true, "A temporary error occurred during validation. Please retry.");
+            log.error("Validation service error: docId={} userId={} exceptionClass={}",
+                    docId, userId, e.getClass().getSimpleName());
+            DocumentResponse resp = failDocument(doc, true, "A temporary error occurred during validation. Please retry.");
+            log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable=true totalDurationMs={}",
+                    docId, userId, System.currentTimeMillis() - pipelineStartMs);
+            return resp;
         }
 
-        // Build effective line items applying any corrections
+        // ── Persist purchase order ──���─────────────────────────────────────────
         List<ValidationResult.Correction> corrections = validationResult.corrections();
-
         try {
             PurchaseOrder po = new PurchaseOrder();
             po.setUser(user);
@@ -244,10 +308,19 @@ public class DocumentService {
             doc.setRetryable(false);
             doc.setErrorMessage(null);
             documentRepository.save(doc);
+
+            log.info("Document processing finished: docId={} userId={} finalStatus={} poId={} lineItems={} totalDurationMs={}",
+                    docId, userId, validationResult.outcome(), savedPo.getId(),
+                    po.getItems().size(), System.currentTimeMillis() - pipelineStartMs);
+
             return toResponse(doc, extractedText, extractedPO, savedPo.getId(), false);
         } catch (Exception e) {
-            log.error("Failed to persist purchase order for document {}: {}", doc.getId(), e.getMessage(), e);
-            return failDocument(doc, true, "A temporary error occurred while saving the purchase order. Please retry.");
+            log.error("Purchase order persistence failed: docId={} userId={} exceptionClass={}",
+                    docId, userId, e.getClass().getSimpleName());
+            DocumentResponse resp = failDocument(doc, true, "A temporary error occurred while saving the purchase order. Please retry.");
+            log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable=true totalDurationMs={}",
+                    docId, userId, System.currentTimeMillis() - pipelineStartMs);
+            return resp;
         }
     }
 
@@ -340,10 +413,19 @@ public class DocumentService {
         return fileBytes;
     }
 
-    private String extractTextOrThrow(byte[] fileBytes) {
+    /**
+     * Extract plain text from PDF or DOCX bytes.
+     * userId and fileName are used only for safe logging — document content is never logged.
+     */
+    private String extractTextOrThrow(byte[] fileBytes, Long userId, String fileName) {
         // Detect type by magic bytes: PDF starts with %PDF
         boolean isPdf = fileBytes.length >= 4
                 && fileBytes[0] == '%' && fileBytes[1] == 'P' && fileBytes[2] == 'D' && fileBytes[3] == 'F';
+
+        String fileType = isPdf ? "PDF" : "DOCX";
+        log.debug("Text extraction starting: userId={} fileName={} fileType={} sizeBytes={}",
+                userId, fileName, fileType, fileBytes.length);
+        long extractStart = System.currentTimeMillis();
 
         String text;
         if (isPdf) {
@@ -351,11 +433,14 @@ public class DocumentService {
                 PDFTextStripper stripper = new PDFTextStripper();
                 text = stripper.getText(pdDocument).strip();
             } catch (IOException e) {
-                log.warn("PDFBox text extraction failed: {}", e.getMessage());
+                log.warn("PDFBox text extraction failed: userId={} fileName={} durationMs={} reason={}",
+                        userId, fileName, System.currentTimeMillis() - extractStart,
+                        e.getClass().getSimpleName());
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "The PDF could not be parsed. It may be corrupt, password-protected, or an unsupported format.");
             }
             if (text.isBlank()) {
+                log.warn("PDF produced no extractable text: userId={} fileName={}", userId, fileName);
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "No text could be extracted from this PDF. It may be a scanned image-only document and is not supported at this time.");
             }
@@ -370,16 +455,21 @@ public class DocumentService {
                     text = extractor.getText().strip();
                 }
             } catch (Exception e) {
-                log.warn("Apache POI DOCX text extraction failed: {}", e.getMessage());
+                log.warn("Apache POI DOCX text extraction failed: userId={} fileName={} durationMs={} reason={}",
+                        userId, fileName, System.currentTimeMillis() - extractStart,
+                        e.getClass().getSimpleName());
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "The DOCX file could not be parsed. It may be corrupt or an unsupported format.");
             }
             if (text.isBlank()) {
+                log.warn("DOCX produced no extractable text: userId={} fileName={}", userId, fileName);
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "No text could be extracted from this DOCX. The document appears to be empty.");
             }
         }
 
+        log.debug("Text extraction succeeded: userId={} fileName={} fileType={} charCount={} durationMs={}",
+                userId, fileName, fileType, text.length(), System.currentTimeMillis() - extractStart);
         return text;
     }
 
@@ -401,6 +491,10 @@ public class DocumentService {
     }
 
     private boolean isRetryableException(Exception e) {
+        // Typed exceptions from GeminiCallExecutor take priority
+        if (e instanceof GeminiTransientException) return true;
+        if (e instanceof GeminiPermanentException) return false;
+        // Fallback for any other wrapped exception
         String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
         return msg.contains("timeout") || msg.contains("timed out")
                 || msg.contains("connection") || msg.contains("network")

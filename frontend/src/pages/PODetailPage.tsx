@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import styles from './PODetailPage.module.css';
 import type { SearchState } from './SearchPage';
+import DeleteDocumentModal from '../components/DeleteDocumentModal';
 
 interface POItem {
   id: number;
@@ -14,6 +15,8 @@ interface POItem {
 
 interface PurchaseOrderDetail {
   id: number;
+  documentId: number;
+  fileName: string;
   poNumber: string | null;
   supplier: string | null;
   orderDate: string | null;
@@ -58,6 +61,7 @@ export default function PODetailPage() {
   const [po, setPo] = useState<PurchaseOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Source text passed via navigation state (from upload flow)
   const extractedText: string | null = location.state?.extractedText ?? null;
@@ -140,8 +144,25 @@ export default function PODetailPage() {
               ✓ Completed
             </span>
           )}
+          <button
+            className={styles.deleteDocBtn}
+            onClick={() => setShowDeleteModal(true)}
+            aria-label="Delete document"
+            title="Delete document"
+          >
+            🗑 Delete
+          </button>
         </div>
       </div>
+
+      {showDeleteModal && po && (
+        <DeleteDocumentModal
+          documentId={po.documentId}
+          documentName={po.fileName ?? `Document #${po.documentId}`}
+          onCancel={() => setShowDeleteModal(false)}
+          onDeleted={() => navigate('/dashboard/purchase-orders', { replace: true })}
+        />
+      )}
 
       {/* ── COMPLETED_WITH_CORRECTIONS banner ────────────────────────────── */}
       {isCompletedWithCorrections && corrections.length > 0 && (

@@ -33,6 +33,15 @@ public class DocumentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(
+            @PathVariable("id") Long documentId,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        documentService.deleteDocument(documentId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/retry")
     public ResponseEntity<DocumentResponse> retry(
             @PathVariable("id") Long documentId,

@@ -152,7 +152,7 @@
 
 .uploadAnotherBtn:hover { background: var(--blue-700); }
 
-/* ── Generic Card ────────────────────────────────��───────────────────── */
+/* ── Generic Card ───────────────────────────────────────────────────── */
 .card {
   background: var(--white);
   border: 1px solid var(--gray-200);
@@ -191,7 +191,7 @@
 
 .itemCount { font-size: 12px; color: var(--gray-400); font-weight: 500; }
 
-/* ── Info Grid (2-column) ────────────────────────────────────────────── */
+/* ── Info Grid (2-column) ───────────────────────────────���────────────── */
 .infoGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -376,3 +376,24 @@ details[open] .sourceTextChevron { transform: rotate(90deg); }
 .grandTotal,
 .grandTotalLabel,
 .grandTotalValue { /* superseded by new layout */ }
+
+/* ── Delete button ───────────────────────────────────────────────── */
+.deleteDocBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1.5px solid #fca5a5;
+  background: #fff5f5;
+  color: #dc2626;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin-left: 0.5rem;
+}
+.deleteDocBtn:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+}

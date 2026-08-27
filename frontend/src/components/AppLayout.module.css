@@ -72,6 +72,18 @@
   padding: 20px 16px;
   border-bottom: 1px solid var(--gray-100);
   min-height: 68px;
+  /* Allow the collapse button to always be reachable — no clipping */
+  position: relative;
+}
+
+/* When collapsed: center the logo + show the collapse button centred below/beside it */
+.sidebar.collapsed .brand {
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 68px;
 }
 
 .logoMark {
@@ -100,19 +112,35 @@
 
 .collapseBtn {
   background: none;
-  border: none;
-  padding: 4px;
-  border-radius: 4px;
+  border: 1px solid var(--gray-200);
+  padding: 5px 7px;
+  border-radius: 6px;
   font-size: 14px;
   color: var(--gray-400);
   flex-shrink: 0;
   margin-left: auto;
   line-height: 1;
+  /* Ensure the button is always fully visible and never clipped */
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+
+/* When sidebar is collapsed the button should be centered beneath the logo */
+.sidebar.collapsed .collapseBtn {
+  margin-left: 0;
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .collapseBtn:hover {
   background: var(--gray-100);
   color: var(--gray-600);
+  border-color: var(--gray-300);
 }
 
 @media (max-width: 767px) {

@@ -2,11 +2,14 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import styles from './PurchaseOrdersPage.module.css';
+import DeleteDocumentModal from '../components/DeleteDocumentModal';
 
 const PAGE_SIZE = 10;
 
 interface PurchaseOrder {
   id: number;
+  documentId: number;
+  fileName: string;
   poNumber: string | null;
   supplier: string | null;
   orderDate: string | null;
@@ -63,6 +66,7 @@ export default function PurchaseOrdersPage() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ documentId: number; fileName: string; poId: number } | null>(null);
 
   // Close export menu on outside click
   useEffect(() => {
@@ -271,7 +275,17 @@ export default function PurchaseOrdersPage() {
                       <td className={styles.td}><span className={styles.supplier}>{po.supplier ?? '—'}</span></td>
                       <td className={styles.td}><span className={styles.date}>{fmtDate(po.orderDate)}</span></td>
                       <td className={`${styles.td} ${styles.tdRight}`}><span className={styles.total}>{fmtCurrency(po.total)}</span></td>
-                      <td className={`${styles.td} ${styles.tdAction}`}><span className={styles.viewArrow}>→</span></td>
+                      <td className={`${styles.td} ${styles.tdAction}`} onClick={e => e.stopPropagation()}>
+                        <button
+                          className={styles.deleteRowBtn}
+                          title="Delete document"
+                          aria-label={`Delete ${po.fileName ?? 'document'}`}
+                          onClick={() => setDeleteTarget({ documentId: po.documentId, fileName: po.fileName, poId: po.id })}
+                        >
+                          🗑
+                        </button>
+                        <span className={styles.viewArrow}>→</span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -294,5 +308,17 @@ export default function PurchaseOrdersPage() {
         )}
       </div>
     </div>
+
+    {deleteTarget && (
+      <DeleteDocumentModal
+        documentId={deleteTarget.documentId}
+        documentName={deleteTarget.fileName}
+        onCancel={() => setDeleteTarget(null)}
+        onDeleted={() => {
+          setPos(prev => prev.filter(p => p.id !== deleteTarget.poId));
+          setDeleteTarget(null);
+        }}
+      />
+    )}
   );
 }

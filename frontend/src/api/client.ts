@@ -64,6 +64,8 @@ export const api = {
 
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
 
+  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+
   getBlob: (path: string) => {
     const token = getToken();
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};

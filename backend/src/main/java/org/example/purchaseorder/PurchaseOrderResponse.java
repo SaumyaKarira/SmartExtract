@@ -9,6 +9,7 @@ public record PurchaseOrderResponse(
         Long id,
         Long userId,
         Long documentId,
+        String fileName,
         String poNumber,
         String supplier,
         LocalDate orderDate,

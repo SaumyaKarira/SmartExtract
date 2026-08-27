@@ -34,7 +34,9 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user.getId());
-        return new LoginResponse(token);
+        // Return the authoritative name and email from the database so the client
+        // always has the current values — never relies on stale cached data.
+        return new LoginResponse(token, user.getName(), user.getEmail());
     }
 
     @Transactional

@@ -41,6 +41,7 @@ public class PurchaseOrderService {
                 po.getId(),
                 po.getUser().getId(),
                 po.getDocument().getId(),
+                po.getDocument().getFileName(),
                 po.getPoNumber(),
                 po.getSupplier(),
                 po.getOrderDate(),

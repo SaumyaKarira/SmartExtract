@@ -16,6 +16,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.example.entity.PurchaseOrder;
+import org.example.entity.PurchaseOrderItem;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -52,6 +55,115 @@ class DocumentServiceTest {
         testUser.setId(1L);
         testUser.setName("Test User");
         testUser.setEmail("test@example.com");
+    }
+
+    // -------------------------------------------------------------------------
+    // deleteDocument tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    void deleteDocument_successfulDeletion() {
+        Document doc = makeDoc(99L, testUser, DocumentStatus.COMPLETED);
+        when(documentRepository.findById(99L)).thenReturn(Optional.of(doc));
+
+        documentService.deleteDocument(99L, 1L);
+
+        verify(documentRepository).delete(doc);
+    }
+
+    @Test
+    void deleteDocument_cascadesPoAndItems() {
+        // PurchaseOrder with items is attached to the document.
+        // CascadeType.ALL on the mapping means documentRepository.delete(doc)
+        // removes the PO and its items atomically. We verify delete is called once
+        // and that the PO/items repos are NOT called directly (JPA cascade handles it).
+        PurchaseOrderItem item = new PurchaseOrderItem();
+        PurchaseOrder po = new PurchaseOrder();
+        po.setId(55L);
+        po.getItems().add(item);
+
+        Document doc = makeDoc(99L, testUser, DocumentStatus.COMPLETED);
+        doc.setPurchaseOrder(po);
+
+        when(documentRepository.findById(99L)).thenReturn(Optional.of(doc));
+
+        documentService.deleteDocument(99L, 1L);
+
+        // Only documentRepository.delete is called — cascade handles the rest
+        verify(documentRepository).delete(doc);
+        verifyNoInteractions(purchaseOrderRepository);
+    }
+
+    @Test
+    void deleteDocument_unauthorized_throwsForbidden() {
+        User otherUser = new User();
+        otherUser.setId(999L);
+        Document doc = makeDoc(99L, otherUser, DocumentStatus.COMPLETED);
+
+        when(documentRepository.findById(99L)).thenReturn(Optional.of(doc));
+
+        ResponseStatusException ex = catchThrowableOfType(
+                () -> documentService.deleteDocument(99L, 1L), // userId=1, but doc owned by 999
+                ResponseStatusException.class);
+
+        assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(documentRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteDocument_notFound_throwsNotFound() {
+        when(documentRepository.findById(404L)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = catchThrowableOfType(
+                () -> documentService.deleteDocument(404L, 1L),
+                ResponseStatusException.class);
+
+        assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verify(documentRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteDocument_repositoryThrows_propagatesException() {
+        Document doc = makeDoc(99L, testUser, DocumentStatus.COMPLETED);
+        when(documentRepository.findById(99L)).thenReturn(Optional.of(doc));
+        doThrow(new RuntimeException("DB connection lost")).when(documentRepository).delete(doc);
+
+        // Exception must propagate — nothing silently swallowed
+        assertThatThrownBy(() -> documentService.deleteDocument(99L, 1L))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("DB connection lost");
+    }
+
+    @Test
+    void deleteDocument_onlyOwnerCanDelete_multipleUsers() {
+        User alice = new User(); alice.setId(1L);
+        User bob   = new User(); bob.setId(2L);
+
+        Document doc = makeDoc(10L, alice, DocumentStatus.COMPLETED);
+        when(documentRepository.findById(10L)).thenReturn(Optional.of(doc));
+
+        // Bob must not be able to delete Alice's document
+        ResponseStatusException ex = catchThrowableOfType(
+                () -> documentService.deleteDocument(10L, 2L),
+                ResponseStatusException.class);
+
+        assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(documentRepository, never()).delete(any());
+
+        // Alice can delete her own document
+        documentService.deleteDocument(10L, 1L);
+        verify(documentRepository).delete(doc);
+    }
+
+    private Document makeDoc(Long id, User owner, DocumentStatus status) {
+        Document doc = new Document();
+        doc.setId(id);
+        doc.setUser(owner);
+        doc.setFileName("test.pdf");
+        doc.setFileType("application/pdf");
+        doc.setStatus(status);
+        doc.setUploadedAt(LocalDateTime.now());
+        return doc;
     }
 
     // -------------------------------------------------------------------------

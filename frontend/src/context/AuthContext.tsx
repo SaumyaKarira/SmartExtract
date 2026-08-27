@@ -63,11 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logout, navigate]);
 
   const login = async (email: string, password: string) => {
-    const { token } = await api.post<{ token: string }>('/api/auth/login', { email, password });
-    // Name is not in login response — reuse stored name if present, else fall back to email prefix
-    const stored = localStorage.getItem(USER_KEY);
-    const name = stored ? (JSON.parse(stored) as User).name : email.split('@')[0];
-    persist({ email, name }, token);
+    const result = await api.post<{ token: string; name: string; email: string }>(
+      '/api/auth/login', { email, password });
+    // Use the authoritative name from the database — never rely on stale localStorage.
+    persist({ email: result.email, name: result.name }, result.token);
   };
 
   const register = async (name: string, email: string, password: string) => {

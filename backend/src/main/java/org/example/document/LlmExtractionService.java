@@ -4,11 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class LlmExtractionService {
+
+    private static final Logger log = LoggerFactory.getLogger(LlmExtractionService.class);
 
     private final Client geminiClient;
     private final String model;
@@ -61,6 +65,7 @@ public class LlmExtractionService {
 
         String rawText = response.text();
         if (rawText == null || rawText.isBlank()) {
+            log.warn("Gemini returned an empty response for po-extraction");
             throw new RuntimeException("Gemini returned an empty response");
         }
         String raw = rawText.strip();
@@ -71,8 +76,12 @@ public class LlmExtractionService {
         }
 
         try {
-            return objectMapper.readValue(raw, ExtractedPurchaseOrder.class);
+            ExtractedPurchaseOrder result = objectMapper.readValue(raw, ExtractedPurchaseOrder.class);
+            log.debug("Gemini response parsed successfully: itemCount={}",
+                    result.items() != null ? result.items().size() : 0);
+            return result;
         } catch (Exception e) {
+            log.warn("Gemini response JSON parse failed: reason={}", e.getClass().getSimpleName());
             throw new RuntimeException("Failed to parse Gemini response as JSON: " + e.getMessage(), e);
         }
     }

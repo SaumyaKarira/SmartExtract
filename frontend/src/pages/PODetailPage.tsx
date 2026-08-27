@@ -239,10 +239,6 @@ export default function PODetailPage() {
           <InfoField label="Vendor" value={po.supplier ?? '—'} />
           <InfoField label="PO Date" value={fmtDate(po.orderDate)} />
           <InfoField label="Payment Terms" value={po.paymentTerms ?? '—'} />
-          <InfoField
-            label={corrections.some(c => c.field === 'grandTotal') ? 'Total Amount (corrected)' : 'Total Amount'}
-            value={fmtCurrency(po.total)}
-          />
           {po.deliveryDate && <InfoField label="Delivery Date" value={fmtDate(po.deliveryDate)} />}
           {po.currency && <InfoField label="Currency" value={po.currency} />}
         </div>
@@ -287,8 +283,8 @@ export default function PODetailPage() {
           </div>
         )}
 
-        {/* Order Summary — only shown when subtotal or tax are available (total alone is already in the details grid) */}
-        {(po.subtotal != null || po.tax != null) && (
+        {/* Order Summary — shown whenever at least one of subtotal, tax, or total is available */}
+        {(po.subtotal != null || po.tax != null || po.total != null) && (
           <div className={styles.summarySection}>
             <h3 className={styles.summaryTitle}>Order Summary</h3>
             <div className={styles.summaryRows}>
@@ -306,7 +302,9 @@ export default function PODetailPage() {
               )}
               {po.total != null && (
                 <div className={`${styles.summaryRow} ${styles.summaryGrandTotal}`}>
-                  <span className={styles.summaryGrandLabel}>Total</span>
+                  <span className={styles.summaryGrandLabel}>
+                    {corrections.some(c => c.field === 'grandTotal') ? 'Total (corrected)' : 'Total'}
+                  </span>
                   <span className={styles.summaryGrandValue}>{fmtCurrency(po.total)}</span>
                 </div>
               )}

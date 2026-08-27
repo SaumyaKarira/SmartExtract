@@ -107,24 +107,27 @@ public class GeminiCallExecutor {
 
             } catch (GeminiPermanentException e) {
                 long durationMs = System.currentTimeMillis() - attemptStart;
-                log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={} cause={} message={}",
+                log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={} causeType={} causeMessage={} rootType={} rootMessage={}",
                         callLabel, attempt, maxAttempts, durationMs, e.getMessage(),
-                        e.getCause() != null ? e.getCause().getClass().getSimpleName() : "none",
-                        e.getCause() != null ? e.getCause().getMessage() : "n/a");
+                        e.getCause() != null ? e.getCause().getClass().getName() : "none",
+                        e.getCause() != null ? e.getCause().getMessage() : "n/a",
+                        rootCauseType(e.getCause()), rootCauseMessage(e.getCause()));
                 throw e;
 
             } catch (Exception e) {
                 long durationMs = System.currentTimeMillis() - attemptStart;
                 RuntimeException classified = classify(e);
                 if (classified instanceof GeminiPermanentException p) {
-                    log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={} exceptionType={} message={}",
+                    log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={} exceptionType={} message={} rootType={} rootMessage={}",
                             callLabel, attempt, maxAttempts, durationMs, p.getMessage(),
-                            e.getClass().getName(), e.getMessage());
+                            e.getClass().getName(), e.getMessage(),
+                            rootCauseType(e), rootCauseMessage(e));
                     throw p;
                 }
-                log.warn("Gemini [{}]: transient failure on attempt {}/{} durationMs={} category={} exceptionType={} message={}",
+                log.warn("Gemini [{}]: transient failure on attempt {}/{} durationMs={} category={} exceptionType={} message={} rootType={} rootMessage={}",
                         callLabel, attempt, maxAttempts, durationMs, classified.getMessage(),
-                        e.getClass().getName(), e.getMessage());
+                        e.getClass().getName(), e.getMessage(),
+                        rootCauseType(e), rootCauseMessage(e));
                 lastTransient = classified;
             }
 
@@ -182,8 +185,12 @@ public class GeminiCallExecutor {
         if (cause instanceof GeminiPermanentException p) return p;
         if (cause instanceof GeminiTransientException t) return t;
 
-        // 2. IOException hierarchy — always transient
+        // 2. IOException hierarchy — always transient.
+        // Log the full cause chain here so GenAiIOException and its root cause are visible.
         if (cause instanceof IOException) {
+            log.warn("Gemini: IOException type='{}' message='{}' rootType='{}' rootMessage='{}'",
+                    causeType(cause), cause.getMessage(),
+                    rootCauseType(cause), rootCauseMessage(cause));
             return new GeminiTransientException("transient:io/" + causeType(cause), cause);
         }
 
@@ -312,7 +319,23 @@ public class GeminiCallExecutor {
     }
 
     private static String causeType(Throwable t) {
-        return t != null ? t.getClass().getSimpleName() : "null";
+        return t != null ? t.getClass().getSimpleName() : "none";
+    }
+
+    /** Returns the simple class name of the deepest cause, or "same" if t has no cause chain. */
+    private static String rootCauseType(Throwable t) {
+        if (t == null) return "none";
+        Throwable root = t;
+        while (root.getCause() != null) root = root.getCause();
+        return root == t ? "same" : root.getClass().getSimpleName();
+    }
+
+    /** Returns the message of the deepest cause, or "same" if t has no cause chain. */
+    private static String rootCauseMessage(Throwable t) {
+        if (t == null) return "none";
+        Throwable root = t;
+        while (root.getCause() != null) root = root.getCause();
+        return root == t ? "same" : root.getMessage();
     }
 
     void sleepSafely(long ms) {

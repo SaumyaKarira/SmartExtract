@@ -69,7 +69,7 @@ const ChevronDownIcon = () => (
   </svg>
 );
 
-const RetryIcon = () => (
+const RefreshIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="1 4 1 10 7 10"/>
     <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
@@ -134,6 +134,15 @@ export default function PurchaseOrdersPage() {
     }
   };
 
+  interface DocumentResponse {
+    id: number;
+    purchaseOrderId: number | null;
+    status: string;
+    errorMessage: string | null;
+    retryable: boolean;
+    retryProcessing: boolean;
+  }
+
   const handleRetry = (documentId: number) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -146,11 +155,21 @@ export default function PurchaseOrdersPage() {
       const formData = new FormData();
       formData.append('file', file);
       try {
-        await api.postForm(`/api/documents/${documentId}/retry`, formData);
-        const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
-        setPos(data);
+        const resp = await api.postForm<DocumentResponse>(`/api/documents/${documentId}/retry`, formData);
+        if (resp && resp.purchaseOrderId) {
+          navigate(`/dashboard/po/${resp.purchaseOrderId}`, { state: { from: 'po-list' } });
+        } else {
+          // Retry submitted but still processing or failed — refresh list
+          const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
+          setPos(data);
+        }
       } catch (err) {
         setRetryErrors(prev => ({ ...prev, [documentId]: err instanceof Error ? err.message : 'Retry failed.' }));
+        // Refresh list to reflect any server-side status update
+        try {
+          const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
+          setPos(data);
+        } catch { /* ignore secondary error */ }
       } finally {
         setRetryingDocId(null);
       }
@@ -315,43 +334,44 @@ export default function PurchaseOrdersPage() {
                     if (isFailed) {
                       return (
                         <tr key={rowKey} className={styles.trFailedOuter}>
-                          <td colSpan={6} className={styles.tdFailedCell}>
-                            <div className={styles.failedCard}>
-                              <div className={styles.failedCardLeft}>
-                                <span className={styles.failedFileIcon}>📄</span>
-                                <div className={styles.failedCardBody}>
+                          <td className={styles.td} colSpan={4}>
+                            <div className={styles.failedCardLeft}>
+                              <span className={styles.failedFileIcon}>📄</span>
+                              <div className={styles.failedCardBody}>
+                                <div className={styles.failedFileNameRow}>
                                   <span className={styles.failedFileName}>{po.fileName}</span>
-                                  {po.errorMessage && (
-                                    <span className={styles.failedErrorMsg}>{po.errorMessage}</span>
-                                  )}
-                                  {retryErrors[po.documentId] && (
-                                    <span className={styles.failedRetryError}>{retryErrors[po.documentId]}</span>
+                                  {po.retryable && (
+                                    <button
+                                      className={styles.refreshBtn}
+                                      disabled={retryingDocId === po.documentId}
+                                      onClick={() => handleRetry(po.documentId)}
+                                      title={retryingDocId === po.documentId ? 'Retrying…' : 'Re-upload and reprocess this document'}
+                                    >
+                                      <RefreshIcon />
+                                    </button>
                                   )}
                                 </div>
-                              </div>
-                              <div className={styles.failedCardRight}>
-                                <span className={`${styles.badge} ${styles.badgeFailed}`}>✕ Failed</span>
-                                {po.retryable && (
-                                  <button
-                                    className={styles.retryBtn}
-                                    disabled={retryingDocId === po.documentId}
-                                    onClick={() => handleRetry(po.documentId)}
-                                    title="Re-upload and reprocess this document"
-                                  >
-                                    <RetryIcon />
-                                    {retryingDocId === po.documentId ? 'Retrying…' : 'Retry'}
-                                  </button>
+                                {po.errorMessage && (
+                                  <span className={styles.failedErrorMsg}>{po.errorMessage}</span>
                                 )}
-                                <button
-                                  className={styles.deleteRowBtn}
-                                  title={`Delete ${po.fileName}`}
-                                  aria-label={`Delete ${po.fileName}`}
-                                  onClick={() => setDeleteTarget({ documentId: po.documentId, fileName: po.fileName, poId: null })}
-                                >
-                                  <TrashIcon />
-                                </button>
+                                {retryErrors[po.documentId] && (
+                                  <span className={styles.failedRetryError}>{retryErrors[po.documentId]}</span>
+                                )}
                               </div>
                             </div>
+                          </td>
+                          <td className={styles.td}>
+                            <span className={`${styles.badge} ${styles.badgeFailed}`}>✕ Failed</span>
+                          </td>
+                          <td className={`${styles.td} ${styles.tdAction}`} onClick={e => e.stopPropagation()}>
+                            <button
+                              className={styles.deleteRowBtn}
+                              title={`Delete ${po.fileName}`}
+                              aria-label={`Delete ${po.fileName}`}
+                              onClick={() => setDeleteTarget({ documentId: po.documentId, fileName: po.fileName, poId: null })}
+                            >
+                              <TrashIcon />
+                            </button>
                           </td>
                         </tr>
                       );

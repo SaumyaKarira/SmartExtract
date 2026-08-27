@@ -560,6 +560,37 @@
   text-overflow: ellipsis;
 }
 
+.failedFileNameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Refresh icon button beside file name */
+.refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--gray-300);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--gray-500);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.refreshBtn:hover:not(:disabled) {
+  background: var(--gray-50);
+  color: var(--gray-800);
+  border-color: var(--gray-400);
+}
+.refreshBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .failedErrorMsg {
   font-size: 12.5px;
   color: var(--gray-500);

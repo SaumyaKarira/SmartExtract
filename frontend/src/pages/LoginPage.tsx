@@ -126,7 +126,6 @@ export default function LoginPage() {
             <div className={styles.field}>
               <div className={styles.labelRow}>
                 <label htmlFor="password" className={styles.label}>Password</label>
-                <Link to="/forgot-password" className={styles.forgotLink}>Forgot password?</Link>
               </div>
               <div className={styles.passwordWrapper}>
                 <input

@@ -17,6 +17,7 @@ public class LlmExtractionService {
     private final Client geminiClient;
     private final String model;
     private final ObjectMapper objectMapper;
+    private final GeminiCallExecutor executor;
 
     private static final String PROMPT_TEMPLATE = """
             Extract the following structured data from the Purchase Order text below.
@@ -64,41 +65,70 @@ public class LlmExtractionService {
     public LlmExtractionService(
             @Value("${app.gemini.api-key}") String apiKey,
             @Value("${app.gemini.model}") String model,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            GeminiCallExecutor executor) {
         this.geminiClient = Client.builder().apiKey(apiKey).build();
         this.model = model;
         this.objectMapper = objectMapper;
+        this.executor = executor;
     }
 
     public ExtractedPurchaseOrder extract(String pdfText) {
         String prompt = PROMPT_TEMPLATE.formatted(pdfText);
 
-        GenerateContentResponse response = geminiClient.models.generateContent(
-                model,
-                prompt,
-                GenerateContentConfig.builder().build()
-        );
+        log.debug("Gemini [po-extraction]: invoking model={}", model);
+        GenerateContentResponse response;
+        try {
+            response = executor.execute(
+                    config -> geminiClient.models.generateContent(model, prompt, config),
+                    "po-extraction"
+            );
+        } catch (GeminiPermanentException e) {
+            log.error("Gemini [po-extraction]: permanent failure — will not retry. " +
+                      "category={} cause={} message={}",
+                      e.getMessage(),
+                      e.getCause() != null ? e.getCause().getClass().getName() : "none",
+                      e.getCause() != null ? e.getCause().getMessage() : "n/a",
+                      e);
+            throw e;
+        } catch (GeminiTransientException e) {
+            log.error("Gemini [po-extraction]: transient failure — all retries exhausted. " +
+                      "category={} cause={} message={}",
+                      e.getMessage(),
+                      e.getCause() != null ? e.getCause().getClass().getName() : "none",
+                      e.getCause() != null ? e.getCause().getMessage() : "n/a",
+                      e);
+            throw e;
+        }
 
         String rawText = response.text();
         if (rawText == null || rawText.isBlank()) {
-            log.warn("Gemini returned an empty response for po-extraction");
-            throw new RuntimeException("Gemini returned an empty response");
+            log.error("Gemini [po-extraction]: model={} returned an empty/null response body — " +
+                      "no text candidates in response", model);
+            throw new GeminiPermanentException("Gemini returned an empty response for po-extraction");
         }
         String raw = rawText.strip();
+        log.debug("Gemini [po-extraction]: raw response length={} chars", raw.length());
 
         // Strip markdown code fences if model returns them despite instructions
         if (raw.startsWith("```")) {
             raw = raw.replaceAll("^```(?:json)?\\s*", "").replaceAll("```\\s*$", "").strip();
+            log.debug("Gemini [po-extraction]: stripped markdown fences, cleaned length={}", raw.length());
         }
 
         try {
             ExtractedPurchaseOrder result = objectMapper.readValue(raw, ExtractedPurchaseOrder.class);
-            log.debug("Gemini response parsed successfully: itemCount={}",
+            log.debug("Gemini [po-extraction]: JSON parsed successfully itemCount={}",
                     result.items() != null ? result.items().size() : 0);
             return result;
         } catch (Exception e) {
-            log.warn("Gemini response JSON parse failed: reason={}", e.getClass().getSimpleName());
-            throw new RuntimeException("Failed to parse Gemini response as JSON: " + e.getMessage(), e);
+            log.error("Gemini [po-extraction]: JSON parse failed. " +
+                      "parseError={} parseMessage={} rawSnippet={}",
+                      e.getClass().getName(), e.getMessage(),
+                      raw.length() > 300 ? raw.substring(0, 300) + "…" : raw,
+                      e);
+            throw new GeminiPermanentException(
+                    "Failed to parse Gemini response as JSON: " + e.getMessage(), e);
         }
     }
 }

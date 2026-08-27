@@ -226,12 +226,17 @@ public class DocumentService {
         } catch (Exception e) {
             long geminiMs = System.currentTimeMillis() - geminiStart;
             boolean retryable = isRetryableException(e);
-            log.error("Gemini extraction failed: docId={} userId={} retryable={} durationMs={} exceptionClass={}",
-                    docId, userId, retryable, geminiMs, e.getClass().getSimpleName());
+            log.error("Gemini extraction failed: docId={} userId={} retryable={} durationMs={} " +
+                      "exceptionClass={} message={} rootCause={} rootCauseMessage={}",
+                    docId, userId, retryable, geminiMs,
+                    e.getClass().getName(), e.getMessage(),
+                    e.getCause() != null ? e.getCause().getClass().getName() : "none",
+                    e.getCause() != null ? e.getCause().getMessage() : "n/a",
+                    e);
             String userMsg = retryable
                     ? "AI extraction failed due to a temporary service issue. Please retry."
                     : "AI could not extract structured data from this document. It may be a scanned image or an unsupported format.";
-            DocumentResponse resp = failDocument(doc, retryable, userMsg);
+            DocumentResponse resp = failDocument(doc, retryable, userMsg, extractedText);
             log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable={} totalDurationMs={}",
                     docId, userId, retryable, System.currentTimeMillis() - pipelineStartMs);
             return resp;
@@ -246,9 +251,9 @@ public class DocumentService {
                     docId, userId, validationResult.outcome(),
                     validationResult.corrections().size(),
                     validationResult.reviewReasons().size());
-        } catch (Exception e) {
-            log.error("Validation service error: docId={} userId={} exceptionClass={}",
-                    docId, userId, e.getClass().getSimpleName());
+            } catch (Exception e) {
+            log.error("Validation service error: docId={} userId={} exceptionClass={} message={}",
+                    docId, userId, e.getClass().getName(), e.getMessage(), e);
             DocumentResponse resp = failDocument(doc, true, "A temporary error occurred during validation. Please retry.");
             log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable=true totalDurationMs={}",
                     docId, userId, System.currentTimeMillis() - pipelineStartMs);
@@ -325,9 +330,9 @@ public class DocumentService {
                     po.getItems().size(), System.currentTimeMillis() - pipelineStartMs);
 
             return toResponse(doc, extractedText, extractedPO, savedPo.getId(), false);
-        } catch (Exception e) {
-            log.error("Purchase order persistence failed: docId={} userId={} exceptionClass={}",
-                    docId, userId, e.getClass().getSimpleName());
+            } catch (Exception e) {
+            log.error("Purchase order persistence failed: docId={} userId={} exceptionClass={} message={}",
+                    docId, userId, e.getClass().getName(), e.getMessage(), e);
             DocumentResponse resp = failDocument(doc, true, "A temporary error occurred while saving the purchase order. Please retry.");
             log.info("Document processing finished: docId={} userId={} finalStatus=FAILED retryable=true totalDurationMs={}",
                     docId, userId, System.currentTimeMillis() - pipelineStartMs);
@@ -485,11 +490,15 @@ public class DocumentService {
     }
 
     private DocumentResponse failDocument(Document doc, boolean retryable, String userMessage) {
+        return failDocument(doc, retryable, userMessage, null);
+    }
+
+    private DocumentResponse failDocument(Document doc, boolean retryable, String userMessage, String extractedText) {
         doc.setStatus(DocumentStatus.FAILED);
         doc.setRetryable(retryable);
         doc.setErrorMessage(userMessage);
         documentRepository.save(doc);
-        return toResponse(doc, null, null, null, false);
+        return toResponse(doc, extractedText, null, null, false);
     }
 
     private String toJson(Object value) {

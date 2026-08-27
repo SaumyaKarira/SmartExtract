@@ -107,20 +107,24 @@ public class GeminiCallExecutor {
 
             } catch (GeminiPermanentException e) {
                 long durationMs = System.currentTimeMillis() - attemptStart;
-                log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={}",
-                        callLabel, attempt, maxAttempts, durationMs, e.getMessage());
+                log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={} cause={} message={}",
+                        callLabel, attempt, maxAttempts, durationMs, e.getMessage(),
+                        e.getCause() != null ? e.getCause().getClass().getSimpleName() : "none",
+                        e.getCause() != null ? e.getCause().getMessage() : "n/a");
                 throw e;
 
             } catch (Exception e) {
                 long durationMs = System.currentTimeMillis() - attemptStart;
                 RuntimeException classified = classify(e);
                 if (classified instanceof GeminiPermanentException p) {
-                    log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={}",
-                            callLabel, attempt, maxAttempts, durationMs, p.getMessage());
+                    log.warn("Gemini [{}]: permanent failure on attempt {}/{} durationMs={} category={} exceptionType={} message={}",
+                            callLabel, attempt, maxAttempts, durationMs, p.getMessage(),
+                            e.getClass().getName(), e.getMessage());
                     throw p;
                 }
-                log.warn("Gemini [{}]: transient failure on attempt {}/{} durationMs={} category={}",
-                        callLabel, attempt, maxAttempts, durationMs, classified.getMessage());
+                log.warn("Gemini [{}]: transient failure on attempt {}/{} durationMs={} category={} exceptionType={} message={}",
+                        callLabel, attempt, maxAttempts, durationMs, classified.getMessage(),
+                        e.getClass().getName(), e.getMessage());
                 lastTransient = classified;
             }
 
@@ -224,9 +228,9 @@ public class GeminiCallExecutor {
         }
 
         // 7. Unknown — permanent (conservative; see Javadoc above)
-        log.warn("Gemini: unrecognised exception type '{}' — classifying as permanent to " +
+        log.warn("Gemini: unrecognised exception type='{}' message='{}' — classifying as permanent to " +
                 "avoid retrying unknown errors; add to transient branches if this is retriable",
-                causeType(cause));
+                causeType(cause), cause != null ? cause.getMessage() : "null");
         return new GeminiPermanentException("permanent:unknown/" + causeType(cause), cause);
     }
 

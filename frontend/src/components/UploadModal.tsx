@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { DragEvent, ChangeEvent } from 'react';
 import styles from './UploadModal.module.css';
 import { api } from '../api/client';
@@ -25,7 +25,7 @@ interface UploadApiResponse {
   errorMessage: string | null;
 }
 
-type UploadState = 'idle' | 'uploading' | 'done_failed' | 'done_failed_retryable' | 'done_duplicate' | 'error';
+type UploadState = 'idle' | 'uploading' | 'done_failed' | 'done_failed_retryable' | 'done_ai_degraded' | 'done_duplicate' | 'error';
 
 export default function UploadModal({ open, onClose, onSuccess, retryDocumentId, retryFile }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,6 +33,7 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [uploadState, setUploadState] = useState<UploadState>('idle');
+  const [retryAttempted, setRetryAttempted] = useState(false);
   const [failedResult, setFailedResult] = useState<{
     documentId: number;
     fileName: string;
@@ -41,6 +42,17 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
     errorMessage: string | null;
   } | null>(null);
   const [duplicateResult, setDuplicateResult] = useState<{ fileName: string; poId: number } | null>(null);
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (failedResult?.extractedText) {
+      navigator.clipboard.writeText(failedResult.extractedText).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  }, [failedResult]);
 
   if (!open) return null;
 
@@ -99,14 +111,20 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
         setUploadState('done_duplicate');
       } else if (result.status === 'FAILED' || !result.purchaseOrderId) {
         if (result.retryable) {
-          setFailedResult({
+          const failData = {
             documentId: result.id,
             fileName: result.fileName,
             extractedText: result.extractedText,
             retryable: true,
             errorMessage: result.errorMessage,
-          });
-          setUploadState('done_failed_retryable');
+          };
+          setFailedResult(failData);
+          // If user already retried once and AI still fails, show degraded view with raw text
+          if (retryAttempted && result.extractedText) {
+            setUploadState('done_ai_degraded');
+          } else {
+            setUploadState('done_failed_retryable');
+          }
         } else {
           setFailedResult({
             documentId: result.id,
@@ -130,16 +148,16 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
 
   const handleRetry = () => {
     if (!failedResult) return;
-    // Reset to idle with the same file so user can re-submit
+    setRetryAttempted(true);
     setUploadState('idle');
     setError('');
-    // Keep the file in state so user can immediately retry
   };
 
   const handleClose = () => {
     setFile(null);
     setError('');
     setUploadState('idle');
+    setRetryAttempted(false);
     setFailedResult(null);
     setDuplicateResult(null);
     onClose();
@@ -156,14 +174,20 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
 
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick} role="dialog" aria-modal>
-      <div className={styles.modal}>
+      <div className={styles.modal} style={uploadState === 'done_ai_degraded' ? { maxWidth: '680px' } : undefined}>
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerLeft}>
             <div className={styles.headerIcon}>📤</div>
             <div>
-              <h2 className={styles.title}>{isRetryMode ? 'Retry Processing' : 'Upload Purchase Order'}</h2>
-              <p className={styles.subtitle}>Supported formats: PDF, DOCX · Max 10 MB · Max 100 pages</p>
+              <h2 className={styles.title}>
+                {uploadState === 'done_ai_degraded' ? 'AI Service Unavailable' : isRetryMode ? 'Retry Processing' : 'Upload Purchase Order'}
+              </h2>
+              <p className={styles.subtitle}>
+                {uploadState === 'done_ai_degraded'
+                  ? 'Raw document text extracted successfully'
+                  : 'Supported formats: PDF, DOCX · Max 10 MB · Max 100 pages'}
+              </p>
             </div>
           </div>
           <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">✕</button>
@@ -254,6 +278,145 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
             <div className={styles.resultFooter}>
               <button className={styles.cancelBtn} onClick={handleClose}>Close</button>
               <button className={styles.processBtn} onClick={handleRetry}>Retry</button>
+            </div>
+          </div>
+        ) : /* AI DEGRADED state — retry also failed, show raw extracted text */
+        uploadState === 'done_ai_degraded' && failedResult ? (
+          <div>
+            {/* Status notice */}
+            <div style={{
+              margin: '0',
+              padding: '14px 24px',
+              background: '#fffbeb',
+              borderBottom: '1px solid #fde68a',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+            }}>
+              <svg style={{ flexShrink: 0, marginTop: '1px' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <div>
+                <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 700, color: '#92400e' }}>
+                  AI extraction is currently unavailable
+                </p>
+                <p style={{ margin: 0, fontSize: '12px', color: '#b45309', lineHeight: '1.5' }}>
+                  The service failed after retrying. We've extracted the raw text from your document below so you can review it manually. The document has been recorded as failed and you can retry later from the Purchase Orders page.
+                </p>
+              </div>
+            </div>
+
+            {/* Raw text panel */}
+            <div style={{ padding: '16px 24px 0' }}>
+              {/* Panel header with file info + copy button */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '8px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                    {failedResult.fileName}
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    color: '#94a3b8',
+                    background: '#f1f5f9',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '4px',
+                    padding: '1px 6px',
+                    fontWeight: 500,
+                  }}>
+                    {failedResult.extractedText
+                      ? `${failedResult.extractedText.split('\n').length} lines`
+                      : ''}
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopy}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '4px 10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: copied ? '#16a34a' : '#475569',
+                    background: copied ? '#f0fdf4' : '#f8fafc',
+                    border: `1px solid ${copied ? '#86efac' : '#e2e8f0'}`,
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {copied ? (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                      Copy text
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Scrollable text area */}
+              <div style={{
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                background: '#f8fafc',
+              }}>
+                <pre style={{
+                  margin: 0,
+                  padding: '14px 16px',
+                  fontSize: '12px',
+                  lineHeight: '1.75',
+                  color: '#334155',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxHeight: '280px',
+                  overflowY: 'auto',
+                  fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace",
+                }}>
+                  {failedResult.extractedText}
+                </pre>
+              </div>
+
+              {/* Helper tip */}
+              <p style={{ margin: '10px 0 0', fontSize: '11.5px', color: '#94a3b8', lineHeight: '1.5' }}>
+                💡 Tip: Copy this text and paste it into your preferred tool, or retry the upload later when the AI service recovers.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              padding: '16px 24px 20px',
+            }}>
+              <button className={styles.cancelBtn} onClick={handleClose}>
+                Close
+              </button>
+              <button className={styles.processBtn} onClick={handleCopy} style={copied ? { background: '#16a34a' } : undefined}>
+                {copied ? '✓ Copied!' : 'Copy Extracted Text'}
+              </button>
             </div>
           </div>
         ) : (

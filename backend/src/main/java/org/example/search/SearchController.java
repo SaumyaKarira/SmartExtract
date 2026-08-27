@@ -44,7 +44,8 @@ public class SearchController {
                 req.status(),
                 "date", "desc",
                 req.page() != null ? req.page() : 0,
-                20
+                20,
+                true // filter form uses inclusive >= / <=
         );
         SearchResponse r = poSearchService.search(q, userId);
         return new SearchResponse(r.parsedQuery(), "filter", r.totalResults(), r.page(), r.pageSize(), r.results());

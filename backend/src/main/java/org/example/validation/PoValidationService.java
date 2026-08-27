@@ -128,25 +128,21 @@ public class PoValidationService {
 
         // ── 3. Grand-total cross-check ────────────────────────────────────────
         //
-        // Policy (applies only when allLinesFullyComputed = true, so every line total
-        // was derived from qty × unitPrice and we have a reliable line sum):
+        // When ALL lines are fully computable the computed line sum is authoritative.
         //
-        //  A) Line sum > grand total (by more than tolerance):
-        //     Definitively wrong — surcharges cannot reduce the total below the item sum.
-        //     → NEEDS_REVIEW.
+        //  • lineSum > grandTotal → the stated total is too LOW to cover the items.
+        //    This is definitively wrong (discounts can't make the total less than items).
+        //    Auto-correct grandTotal = lineSum and mark COMPLETED_WITH_CORRECTIONS.
         //
-        //  B) Grand total > line sum but within a plausible surcharge margin (≤ 50%):
-        //     Acceptable — the difference may be tax, shipping, or other surcharges.
-        //     → No flag.
+        //  • grandTotal > lineSum by more than tolerance → could be tax/shipping, or
+        //    could be a data error.  We cannot safely auto-correct, so flag NEEDS_REVIEW.
         //
-        //  C) Grand total > line sum by more than 50% of the line sum:
-        //     Implausibly large surcharge — almost certainly a data error.
-        //     → NEEDS_REVIEW.
+        //  • grandTotal ≈ lineSum (within tolerance) → COMPLETED, no action.
         //
-        //  D) Grand total is negative → always NEEDS_REVIEW.
+        //  • Negative grandTotal → always NEEDS_REVIEW regardless.
         //
-        // When allLinesFullyComputed = false we can only apply rule A (partial sum
-        // already exceeds total → definitively wrong) and D.
+        // When allLinesFullyComputed = false we only flag the impossible case where
+        // even the partial sum already exceeds the stated total.
 
         if (!validLineTotals.isEmpty() && extracted.totalAmount() != null) {
             BigDecimal computedLineSum = validLineTotals.stream()
@@ -155,34 +151,40 @@ public class PoValidationService {
 
             BigDecimal extractedGrandTotal = bd(extracted.totalAmount()).setScale(2, RoundingMode.HALF_UP);
 
-            // (D) Negative grand total
+            // Negative grand total
             if (extracted.totalAmount() < 0) {
-                reviewReasons.add("Grand total is negative (" + extracted.totalAmount() + "). Please review.");
-            }
-            // (A) Line sum EXCEEDS grand total — definitively wrong
-            else if (computedLineSum.compareTo(extractedGrandTotal) > 0
+                reviewReasons.add("The extracted PO total is negative (" + extractedGrandTotal + "). Please verify.");
+            } else if (allLinesFullyComputed
                     && deviation(computedLineSum, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
-                reviewReasons.add(
-                        "Line-item sum (" + computedLineSum + ") exceeds the extracted PO total ("
-                                + extractedGrandTotal + "). "
-                                + "The shortfall (" + deviation(computedLineSum, extractedGrandTotal)
-                                + ") cannot be explained by tax or surcharges. Please verify the PO total."
-                );
-            }
-            // (C) Grand total implausibly larger than line sum (only when all lines were fully computed)
-            else if (allLinesFullyComputed && computedLineSum.compareTo(BigDecimal.ZERO) > 0) {
-                // Compute ratio: grandTotal / lineSum
-                BigDecimal ratio = extractedGrandTotal.divide(computedLineSum, 4, RoundingMode.HALF_UP);
-                // If grand total > 1.5 × line sum, flag as suspicious
-                if (ratio.compareTo(new BigDecimal("1.50")) > 0) {
+
+                if (computedLineSum.compareTo(extractedGrandTotal) > 0) {
+                    // Line sum EXCEEDS stated total — definitively wrong; auto-correct
+                    corrections.add(new ValidationResult.Correction(
+                            "grandTotal",
+                            extracted.totalAmount(),
+                            computedLineSum.doubleValue(),
+                            "PO total corrected to match the sum of line items ("
+                                    + computedLineSum + "). Extracted value was " + extractedGrandTotal + "."
+                    ));
+                } else {
+                    // Grand total HIGHER than line sum — could be tax/shipping; flag for review
                     reviewReasons.add(
-                            "Extracted PO total (" + extractedGrandTotal + ") is " + ratio
-                                    + "× the line-item sum (" + computedLineSum + "). "
-                                    + "This is implausibly large for tax/surcharges alone. Please verify the PO total."
+                            "The extracted PO total (" + extractedGrandTotal
+                                    + ") is higher than the sum of line items (" + computedLineSum
+                                    + "). This may indicate tax or additional charges not listed as line items, "
+                                    + "or a data error. Please verify."
                     );
                 }
+            } else if (!allLinesFullyComputed
+                    && computedLineSum.compareTo(extractedGrandTotal) > 0
+                    && deviation(computedLineSum, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
+                // Partial sum already exceeds total — impossible
+                reviewReasons.add(
+                        "The sum of extractable line items (" + computedLineSum
+                                + ") already exceeds the PO total (" + extractedGrandTotal
+                                + "). Please verify the totals."
+                );
             }
-            // (B) Grand total >= line sum within plausible range — acceptable (tax/discount/shipping).
         }
 
         // ── 4. Determine outcome ──────────────────────────────────────────────

@@ -48,12 +48,7 @@
   top: 0;
   background: var(--white);
   border-right: 1px solid var(--gray-200);
-  transition: width 0.2s ease;
   overflow: hidden;
-}
-
-.sidebar.collapsed {
-  width: 64px;
 }
 
 @media (max-width: 767px) {
@@ -69,17 +64,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--gray-100);
   height: 64px;
   flex-shrink: 0;
 }
 
-.sidebar.collapsed .brand {
-  justify-content: center;
-  padding: 0 8px;
-  gap: 0;
-}
 
 .logoMark {
   width: 32px;
@@ -105,36 +95,6 @@
   flex: 1;
 }
 
-.collapseBtn {
-  background: none;
-  border: 1px solid var(--gray-200);
-  padding: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gray-400);
-  flex-shrink: 0;
-  margin-left: auto;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.sidebar.collapsed .collapseBtn {
-  margin-left: 0;
-}
-
-.collapseBtn:hover {
-  background: var(--gray-100);
-  color: var(--gray-600);
-  border-color: var(--gray-300);
-}
-
-@media (max-width: 767px) {
-  .collapseBtn { display: none; }
-}
 
 /* Nav */
 .nav {
@@ -160,10 +120,6 @@
   transition: background 0.12s, color 0.12s;
 }
 
-.sidebar.collapsed .navItem {
-  justify-content: center;
-  padding: 9px 0;
-}
 
 .navItem:hover {
   background: var(--gray-100);
@@ -181,10 +137,12 @@
 }
 
 .navIcon {
-  font-size: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
-  width: 22px;
-  text-align: center;
 }
 
 .navLabel {
@@ -370,7 +328,12 @@
   color: var(--red-500);
 }
 
-.profileMenuIcon { font-size: 15px; }
+.profileMenuIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 
 /* ── Main ── */
 .main {

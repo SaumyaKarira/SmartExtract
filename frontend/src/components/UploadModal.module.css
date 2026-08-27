@@ -254,7 +254,63 @@
   letter-spacing: 0.5px;
 }
 
-/* Footer */
+/* ── Result states (failed / retryable) ── */
+.resultBody {
+  padding: 24px 24px 20px;
+}
+
+.resultBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.resultBannerFailed {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.resultBannerRetryable {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
+.resultBannerIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resultBannerContent {}
+
+.resultBannerTitle {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.resultBannerTitleFailed    { color: #dc2626; }
+.resultBannerTitleRetryable { color: #b45309; }
+
+.resultBannerMsg {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.resultBannerMsgFailed    { color: #6b2121; }
+.resultBannerMsgRetryable { color: #78350f; }
+
+.resultFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
 .footer {
   display: flex;
   justify-content: flex-end;

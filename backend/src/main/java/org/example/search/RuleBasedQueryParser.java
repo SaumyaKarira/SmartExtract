@@ -37,6 +37,8 @@ public class RuleBasedQueryParser {
     // Status
     private static final Pattern STATUS_COMPLETED = Pattern.compile(
             "\\b(completed|processed|done|finished)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STATUS_NEEDS_REVIEW = Pattern.compile(
+            "\\b(needs?\\s+review|review|needs?\\s+attention|flagged)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern STATUS_PROCESSING = Pattern.compile(
             "\\b(processing|pending|in[-\\s]?progress)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern STATUS_FAILED = Pattern.compile(
@@ -96,6 +98,7 @@ public class RuleBasedQueryParser {
         String sortBy = "date";
         String sortDir = "desc";
         boolean matched = false;
+        int pageSize = 20; // default; overridden for top-N intents
 
         // ── Amount ──────────────────────────────────────────────────────────
         Matcher between = BETWEEN.matcher(q);
@@ -138,15 +141,24 @@ public class RuleBasedQueryParser {
         }
 
         // ── Status ──────────────────────────────────────────────────────────
-        if (STATUS_COMPLETED.matcher(q).find()) { status = "COMPLETED"; matched = true; }
-        else if (STATUS_PROCESSING.matcher(q).find()) { status = "PROCESSING"; matched = true; }
-        else if (STATUS_FAILED.matcher(q).find()) { status = "FAILED"; matched = true; }
+        // Use "COMPLETED_ANY" as a sentinel meaning COMPLETED + COMPLETED_WITH_CORRECTIONS
+        if (STATUS_COMPLETED.matcher(q).find())     { status = "COMPLETED_ANY"; matched = true; }
+        else if (STATUS_NEEDS_REVIEW.matcher(q).find()) { status = "NEEDS_REVIEW"; matched = true; }
+        else if (STATUS_PROCESSING.matcher(q).find())   { status = "PROCESSING";   matched = true; }
+        else if (STATUS_FAILED.matcher(q).find())        { status = "FAILED";       matched = true; }
 
         // ── Sort ────────────────────────────────────────────────────────────
-        if (SORT_LARGEST.matcher(q).find()) { sortBy = "amount"; sortDir = "desc"; matched = true; }
-        else if (SORT_SMALLEST.matcher(q).find()) { sortBy = "amount"; sortDir = "asc"; matched = true; }
-        else if (SORT_RECENT.matcher(q).find()) { sortBy = "date"; sortDir = "desc"; matched = true; }
-        else if (SORT_OLDEST.matcher(q).find()) { sortBy = "date"; sortDir = "asc"; matched = true; }
+        if (SORT_LARGEST.matcher(q).find()) {
+            sortBy = "amount"; sortDir = "desc"; matched = true;
+            pageSize = 5; // "largest" = show top 5, not all sorted
+        } else if (SORT_SMALLEST.matcher(q).find()) {
+            sortBy = "amount"; sortDir = "asc"; matched = true;
+            pageSize = 5; // "smallest" = show bottom 5
+        } else if (SORT_RECENT.matcher(q).find()) {
+            sortBy = "date"; sortDir = "desc"; matched = true;
+        } else if (SORT_OLDEST.matcher(q).find()) {
+            sortBy = "date"; sortDir = "asc"; matched = true;
+        }
 
         // ── PO Number ───────────────────────────────────────────────────────
         Matcher mPo = PO_NUMBER.matcher(q);
@@ -188,7 +200,7 @@ public class RuleBasedQueryParser {
         return Optional.of(new SearchQuery(
                 poNumber, supplier, null,
                 minAmount, maxAmount, dateFrom, dateTo,
-                status, sortBy, sortDir, 0, 20));
+                status, sortBy, sortDir, 0, pageSize, false));
     }
 
     /** Strip any trailing noise words from a captured supplier string. */

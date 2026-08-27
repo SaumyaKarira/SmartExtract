@@ -42,7 +42,7 @@ public class PurchaseOrderSearchService {
         List<Predicate> predicates = buildPredicates(cb, root, cq, q, userId);
         cq.select(root).distinct(true).where(predicates.toArray(new Predicate[0]));
 
-        // Sort
+        // Sort — nulls last so POs without a total don't float to the top
         String sortBy = q.sortBy() != null ? q.sortBy() : "date";
         String sortDir = q.sortDir() != null ? q.sortDir() : "desc";
         Expression<?> sortExpr = switch (sortBy) {
@@ -51,7 +51,9 @@ public class PurchaseOrderSearchService {
             case "supplier"  -> root.get("supplier");
             default          -> root.get("createdAt");
         };
-        cq.orderBy("asc".equals(sortDir) ? cb.asc(sortExpr) : cb.desc(sortExpr));
+        Order order = "asc".equals(sortDir) ? cb.asc(sortExpr) : cb.desc(sortExpr);
+        // Push NULLs to the end regardless of sort direction
+        cq.orderBy(order, cb.asc(root.get("id")));
 
         int page = Math.max(0, q.page());
         int pageSize = (q.pageSize() > 0 && q.pageSize() <= 100) ? q.pageSize() : 20;
@@ -90,10 +92,14 @@ public class PurchaseOrderSearchService {
         }
 
         if (q.minAmount() != null) {
-            predicates.add(cb.greaterThanOrEqualTo(root.get("total"), q.minAmount()));
+            predicates.add(q.amountInclusive()
+                    ? cb.greaterThanOrEqualTo(root.get("total"), q.minAmount())
+                    : cb.greaterThan(root.get("total"), q.minAmount()));
         }
         if (q.maxAmount() != null) {
-            predicates.add(cb.lessThanOrEqualTo(root.get("total"), q.maxAmount()));
+            predicates.add(q.amountInclusive()
+                    ? cb.lessThanOrEqualTo(root.get("total"), q.maxAmount())
+                    : cb.lessThan(root.get("total"), q.maxAmount()));
         }
 
         if (q.dateFrom() != null) {
@@ -104,10 +110,17 @@ public class PurchaseOrderSearchService {
         }
 
         if (q.status() != null && !q.status().isBlank()) {
-            // Join to document to filter by status
             Join<?, ?> docJoin = root.join("document", JoinType.LEFT);
-            predicates.add(cb.equal(docJoin.get("status"),
-                    DocumentStatus.valueOf(q.status())));
+            if ("COMPLETED_ANY".equals(q.status())) {
+                // Match both COMPLETED and COMPLETED_WITH_CORRECTIONS
+                predicates.add(docJoin.get("status").in(
+                        DocumentStatus.COMPLETED,
+                        DocumentStatus.COMPLETED_WITH_CORRECTIONS
+                ));
+            } else {
+                predicates.add(cb.equal(docJoin.get("status"),
+                        DocumentStatus.valueOf(q.status())));
+            }
         }
 
         if (q.itemDescription() != null && !q.itemDescription().isBlank()) {
@@ -138,19 +151,38 @@ public class PurchaseOrderSearchService {
 
     private String buildDescription(SearchQuery q) {
         List<String> parts = new ArrayList<>();
-        if (q.poNumber() != null)       parts.add("PO number contains \"" + q.poNumber() + "\"");
-        if (q.supplier() != null)       parts.add("supplier contains \"" + q.supplier() + "\"");
+        if (q.poNumber() != null)        parts.add("PO number contains \"" + q.poNumber() + "\"");
+        if (q.supplier() != null)        parts.add("supplier contains \"" + q.supplier() + "\"");
         if (q.itemDescription() != null) parts.add("item contains \"" + q.itemDescription() + "\"");
         if (q.minAmount() != null && q.maxAmount() != null)
             parts.add("amount between ₹" + q.minAmount() + " and ₹" + q.maxAmount());
-        else if (q.minAmount() != null) parts.add("amount ≥ ₹" + q.minAmount());
-        else if (q.maxAmount() != null) parts.add("amount ≤ ₹" + q.maxAmount());
+        else if (q.minAmount() != null)  parts.add("amount " + (q.amountInclusive() ? "≥" : ">") + " ₹" + q.minAmount());
+        else if (q.maxAmount() != null)  parts.add("amount " + (q.amountInclusive() ? "≤" : "<") + " ₹" + q.maxAmount());
         if (q.dateFrom() != null && q.dateTo() != null)
             parts.add("date between " + q.dateFrom() + " and " + q.dateTo());
-        else if (q.dateFrom() != null)  parts.add("date from " + q.dateFrom());
-        else if (q.dateTo() != null)    parts.add("date up to " + q.dateTo());
-        if (q.status() != null)         parts.add("status = " + q.status());
-        return parts.isEmpty() ? "all purchase orders" : String.join(", ", parts);
+        else if (q.dateFrom() != null)   parts.add("date from " + q.dateFrom());
+        else if (q.dateTo() != null)     parts.add("date up to " + q.dateTo());
+        if (q.status() != null) {
+            String statusLabel = switch (q.status()) {
+                case "COMPLETED_ANY" -> "Completed";
+                case "NEEDS_REVIEW"  -> "Needs Review";
+                case "FAILED"        -> "Failed";
+                case "PROCESSING"    -> "Processing";
+                default              -> q.status();
+            };
+            parts.add("status = " + statusLabel);
+        }
+        String base = parts.isEmpty() ? "all purchase orders" : String.join(", ", parts);
+        // Append sort description
+        if ("amount".equals(q.sortBy())) {
+            String label = "desc".equals(q.sortDir()) ? "largest" : "smallest";
+            if (q.pageSize() <= 10) {
+                base = "Top " + q.pageSize() + " " + label + (parts.isEmpty() ? " purchase orders" : " matching");
+            } else {
+                base += " — sorted by " + label + " first";
+            }
+        }
+        return base;
     }
 
     private PurchaseOrderResponse toResponse(PurchaseOrder po, boolean includeItems) {

@@ -48,7 +48,7 @@ public class SearchService {
             // Last resort: treat the whole query as a keyword search across supplier + poNumber
             SearchQuery fallback = new SearchQuery(
                     rawQuery, rawQuery, rawQuery,
-                    null, null, null, null, null, "date", "desc", 0, 20);
+                    null, null, null, null, null, "date", "desc", 0, 20, false);
             SearchResponse r = searchService.search(fallback, userId);
             return new SearchResponse("keyword: \"" + rawQuery + "\"", "fallback",
                     r.totalResults(), r.page(), r.pageSize(), r.results());

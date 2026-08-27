@@ -264,10 +264,21 @@ public class DocumentService {
             po.setPoNumber(extractedPO.poNumber());
             po.setSupplier(extractedPO.vendorName());
             po.setPaymentTerms(extractedPO.paymentTerms());
+            po.setCurrency(extractedPO.currency());
+            po.setSubtotal(extractedPO.subtotal() != null ? BigDecimal.valueOf(extractedPO.subtotal()) : null);
+            po.setTax(extractedPO.tax() != null ? BigDecimal.valueOf(extractedPO.tax()) : null);
             po.setTotal(extractedPO.totalAmount() != null
                     ? BigDecimal.valueOf(extractedPO.totalAmount()) : null);
+            // Apply grand-total correction if validation computed a better value
+            for (ValidationResult.Correction c : corrections) {
+                if ("grandTotal".equals(c.field())) {
+                    po.setTotal(BigDecimal.valueOf(c.correctedValue()));
+                    break;
+                }
+            }
             po.setCreatedAt(LocalDateTime.now());
             po.setOrderDate(parseDate(extractedPO.poDate()));
+            po.setDeliveryDate(parseDate(extractedPO.deliveryDate()));
 
             if (extractedPO.items() != null) {
                 for (int i = 0; i < extractedPO.items().size(); i++) {

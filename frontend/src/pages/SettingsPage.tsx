@@ -149,14 +149,16 @@ export default function SettingsPage() {
               <div className={styles.divider} />
 
               {!editingProfile ? (
-                <div className={styles.fieldGroup}>
-                  <div className={styles.readField}>
-                    <span className={styles.readLabel}>Full name</span>
-                    <span className={styles.readValue}>{name}</span>
-                  </div>
-                  <div className={styles.readField}>
-                    <span className={styles.readLabel}>Email address</span>
-                    <span className={styles.readValue}>{user?.email}</span>
+                <div className={styles.profileReadView}>
+                  <div className={styles.profileFields}>
+                    <div className={styles.readField}>
+                      <span className={styles.readLabel}>Full name</span>
+                      <span className={styles.readValue}>{name}</span>
+                    </div>
+                    <div className={styles.readField}>
+                      <span className={styles.readLabel}>Email address</span>
+                      <span className={styles.readValue}>{user?.email}</span>
+                    </div>
                   </div>
                   <button className={styles.primaryBtn} onClick={() => { setEditingProfile(true); setProfileError(''); }}>
                     Edit Profile
@@ -298,7 +300,7 @@ export default function SettingsPage() {
                     <p className={styles.accountSectionTitle}>Sign out</p>
                     <p className={styles.accountSectionDesc}>Log out of your SmartExtract account on this device.</p>
                   </div>
-                  <button className={styles.dangerBtn} onClick={handleLogout}>
+                  <button className={styles.outlineBtn} onClick={handleLogout}>
                     Sign Out
                   </button>
                 </div>

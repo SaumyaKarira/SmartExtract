@@ -23,14 +23,23 @@ export default function DashboardPage() {
 
   const firstName = user?.name.split(' ')[0] ?? 'there';
 
+  const fetchStats = () => {
+    api.get<DashboardStats>('/api/dashboard/stats')
+      .then(setStats)
+      .catch(() => {});
+  };
+
   useEffect(() => {
     if (location.state?.openUpload) {
       window.history.replaceState({}, '');
     }
-    api.get<DashboardStats>('/api/dashboard/stats')
-      .then(setStats)
-      .catch(() => {}); // silently keep zeros on error
+    fetchStats();
   }, []);
+
+  const handleModalClose = () => {
+    setUploadOpen(false);
+    fetchStats(); // always refresh stats when modal closes
+  };
 
   const handleUploadSuccess = (
     poId: number | null,
@@ -39,6 +48,7 @@ export default function DashboardPage() {
     _fileName: string
   ) => {
     setUploadOpen(false);
+    fetchStats();
     if (poId) {
       navigate(`/dashboard/po/${poId}`, { state: { extractedText, fromUpload: true } });
     }
@@ -64,9 +74,6 @@ export default function DashboardPage() {
           <h1 className={styles.welcomeHeading}>{greeting}, {firstName} 👋</h1>
           <p className={styles.welcomeSub}>Here's your SmartExtract workspace.</p>
         </div>
-        <button className={styles.uploadCta} onClick={() => setUploadOpen(true)}>
-          <span>+</span> Upload PO
-        </button>
       </div>
 
       {/* KPI stats — always shown, informational only */}
@@ -84,22 +91,24 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Empty state — only shown when there are no POs */}
-      {!hasPos && (
-        <div className={styles.emptyCard}>
-          <div className={styles.emptyIconBg}>
-            <span className={styles.emptyIcon}>📂</span>
-          </div>
-          <h2 className={styles.emptyHeading}>No Purchase Orders yet</h2>
-          <p className={styles.emptyText}>
-            Upload your first Purchase Order and let SmartExtract extract structured data from it automatically using AI.
-          </p>
-          <button className={styles.uploadBtn} onClick={() => setUploadOpen(true)}>
-            <span className={styles.uploadBtnIcon}>+</span>
-            Upload Purchase Order
-          </button>
+      {/* Empty / getting-started card — shown in both states, wording differs */}
+      <div className={styles.emptyCard}>
+        <div className={styles.emptyIconBg}>
+          <span className={styles.emptyIcon}>{hasPos ? '📤' : '📂'}</span>
         </div>
-      )}
+        <h2 className={styles.emptyHeading}>
+          {hasPos ? 'Upload Another Purchase Order' : 'No Purchase Orders yet'}
+        </h2>
+        <p className={styles.emptyText}>
+          {hasPos
+            ? 'Upload a PDF or DOCX and SmartExtract will extract structured data from it automatically using AI.'
+            : 'Upload your first Purchase Order and let SmartExtract extract structured data from it automatically using AI.'}
+        </p>
+        <button className={styles.uploadBtn} onClick={() => setUploadOpen(true)}>
+          <span className={styles.uploadBtnIcon}>+</span>
+          Upload Purchase Order
+        </button>
+      </div>
 
       {/* Feature cards — always shown */}
       <div className={styles.featureGrid}>
@@ -116,7 +125,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={handleUploadSuccess} />
+      <UploadModal open={uploadOpen} onClose={handleModalClose} onSuccess={handleUploadSuccess} />
     </>
   );
 }

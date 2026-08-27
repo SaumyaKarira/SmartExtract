@@ -74,7 +74,7 @@ const fmtCurrency = (val: number | null) =>
 
 const fmtDate = (val: string | null) => {
   if (!val) return '—';
-  try { return new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  try { return new Date(val).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }); }
   catch { return val; }
 };
 

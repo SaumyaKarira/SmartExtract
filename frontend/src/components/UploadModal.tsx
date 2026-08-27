@@ -211,41 +211,49 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
           </div>
         ) : /* FAILED (permanent) state */
         uploadState === 'done_failed' && failedResult ? (
-          <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
-                          background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.85rem 1rem' }}>
-              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>❌</span>
-              <div>
-                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#dc2626' }}>Processing Failed</p>
-                <p style={{ fontSize: '0.82rem', color: '#7f1d1d', margin: 0 }}>
+          <div className={styles.resultBody}>
+            <div className={`${styles.resultBanner} ${styles.resultBannerFailed}`}>
+              <span className={styles.resultBannerIcon}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              </span>
+              <div className={styles.resultBannerContent}>
+                <p className={`${styles.resultBannerTitle} ${styles.resultBannerTitleFailed}`}>Extraction Failed</p>
+                <p className={`${styles.resultBannerMsg} ${styles.resultBannerMsgFailed}`}>
                   {failedResult.errorMessage ??
-                    `AI could not extract structured data from ${failedResult.fileName}. The document may be a scanned image or an unsupported format.`}
+                    `SmartExtract could not extract structured data from "${failedResult.fileName}". The document may be a scanned image, password-protected, or an unsupported format.`}
                 </p>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className={styles.resultFooter}>
               <button className={styles.processBtn} onClick={handleClose}>Close</button>
             </div>
           </div>
         ) : /* FAILED (retryable) state */
         uploadState === 'done_failed_retryable' && failedResult ? (
-          <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
-                          background: '#fff7ed', border: '1px solid #fdba74', borderRadius: '8px', padding: '0.85rem 1rem' }}>
-              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>⚠️</span>
-              <div>
-                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#c2410c' }}>Temporary Processing Issue</p>
-                <p style={{ fontSize: '0.82rem', color: '#7c2d12', margin: 0 }}>
+          <div className={styles.resultBody}>
+            <div className={`${styles.resultBanner} ${styles.resultBannerRetryable}`}>
+              <span className={styles.resultBannerIcon}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </span>
+              <div className={styles.resultBannerContent}>
+                <p className={`${styles.resultBannerTitle} ${styles.resultBannerTitleRetryable}`}>Temporary Processing Issue</p>
+                <p className={`${styles.resultBannerMsg} ${styles.resultBannerMsgRetryable}`}>
                   {failedResult.errorMessage ??
-                    `Processing of ${failedResult.fileName} failed due to a temporary issue. You can retry.`}
+                    `Processing of "${failedResult.fileName}" failed due to a temporary service issue. Please try again.`}
                 </p>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+            <div className={styles.resultFooter}>
               <button className={styles.cancelBtn} onClick={handleClose}>Close</button>
-              <button className={styles.processBtn} onClick={handleRetry}>
-                Retry →
-              </button>
+              <button className={styles.processBtn} onClick={handleRetry}>Retry</button>
             </div>
           </div>
         ) : (

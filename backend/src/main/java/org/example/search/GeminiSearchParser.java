@@ -25,7 +25,7 @@ public class GeminiSearchParser {
     private static final String PROMPT = """
             Convert the following natural-language purchase order search query into a JSON object.
             Return ONLY valid JSON — no markdown, no code fences, no explanation.
-            
+
             JSON schema (all fields optional/nullable):
             {
               "poNumber":        string or null,
@@ -35,19 +35,25 @@ public class GeminiSearchParser {
               "maxAmount":       number or null,
               "dateFrom":        "YYYY-MM-DD" or null,
               "dateTo":          "YYYY-MM-DD" or null,
-              "status":          "COMPLETED" | "PROCESSING" | "FAILED" | null,
+              "status":          "COMPLETED" | "NEEDS_REVIEW" | "PROCESSING" | "FAILED" | null,
               "sortBy":          "date" | "amount" | "poNumber" | "supplier" | null,
               "sortDir":         "asc" | "desc" | null
             }
-            
+
             Rules:
-            - status must be exactly one of: COMPLETED, PROCESSING, FAILED, or null
-            - sortBy must be exactly one of: date, amount, poNumber, supplier, or null
-            - sortDir must be "asc" or "desc" or null
+            - status must be exactly one of: COMPLETED, NEEDS_REVIEW, PROCESSING, FAILED, or null
+            - Use COMPLETED for: "completed", "done", "processed", "finished"
+            - Use NEEDS_REVIEW for: "needs review", "flagged", "review required", "needs attention"
+            - Use FAILED for: "failed", "error", "errors"
+            - For amount filters: "above/over/more than X" → minAmount = X; "below/under/less than X" → maxAmount = X
+            - For sorting: "largest/biggest/highest" → sortBy = "amount", sortDir = "desc"
+            - For sorting: "smallest/lowest/cheapest" → sortBy = "amount", sortDir = "asc"
+            - For sorting: "recent/latest/newest" → sortBy = "date", sortDir = "desc"
+            - For sorting: "oldest/earliest" → sortBy = "date", sortDir = "asc"
             - dates must be ISO format YYYY-MM-DD
-            - amounts are plain numbers (no currency symbols)
+            - amounts are plain numbers — strip any currency symbols (₹, $, etc.) and commas
             - Never generate SQL, code, or explanations
-            
+
             Query: "%s"
             """;
 
@@ -106,7 +112,7 @@ public class GeminiSearchParser {
                     sanitizeStatus(status),
                     sanitizeSortBy(sortBy),
                     sanitizeSortDir(sortDir),
-                    0, 20
+                    0, 20, false // Gemini NL search uses strict > / <
             );
         }
 
@@ -118,9 +124,10 @@ public class GeminiSearchParser {
         private static String sanitizeStatus(String s) {
             if (s == null) return null;
             return switch (s.toUpperCase()) {
-                case "COMPLETED", "PROCESSED" -> "COMPLETED";
-                case "PROCESSING", "PENDING" -> "PROCESSING";
-                case "FAILED", "ERROR" -> "FAILED";
+                case "COMPLETED", "PROCESSED", "DONE", "FINISHED" -> "COMPLETED_ANY";
+                case "NEEDS_REVIEW", "REVIEW", "FLAGGED"           -> "NEEDS_REVIEW";
+                case "PROCESSING", "PENDING"                        -> "PROCESSING";
+                case "FAILED", "ERROR"                              -> "FAILED";
                 default -> null;
             };
         }

@@ -81,17 +81,19 @@ class PoValidationServiceTest {
     }
 
     @Test
-    void needsReview_whenLineTotalCorrectedButGrandTotalStillMismatches() {
-        // 5 × 50000 = 250000; extracted line total is wrong (200000) AND the grand total
-        // is also 200000. After correcting the line, line sum (250000) > grand total (200000).
-        // Cannot determine which value is authoritative → NEEDS_REVIEW.
+    void correctedWithCorrections_whenLineTotalCorrectedAndGrandTotalAlsoLow() {
+        // 5 × 50000 = 250000; extracted line total wrong (200000) AND grand total = 200000.
+        // After line correction, lineSum = 250000 > grandTotal = 200000.
+        // lineSum > grandTotal → auto-correct grandTotal to 250000 as well.
         var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
                 List.of(item("Item A", 5.0, 50000.0, 200000.0))));
 
-        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
-        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("exceeds"));
-        // The line-level correction is still recorded even though status is NEEDS_REVIEW
-        assertThat(result.corrections()).hasSize(1);
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED_WITH_CORRECTIONS);
+        // Two corrections: line total and grand total
+        assertThat(result.corrections()).hasSize(2);
+        assertThat(result.corrections()).anyMatch(c -> c.field().equals("items[0].totalPrice"));
+        assertThat(result.corrections()).anyMatch(c -> c.field().equals("grandTotal") && c.correctedValue() == 250000.0);
+        assertThat(result.reviewReasons()).isEmpty();
     }
 
     @Test
@@ -129,15 +131,26 @@ class PoValidationServiceTest {
     // ── Grand total correction when deterministically calculable ──────────────
 
     @Test
-    void noGrandTotalCorrection_whenTaxDiscountMayExplainDifference() {
-        // Lines sum to 250000 but grand total is 290000 (likely tax included)
-        // We must NOT auto-correct this — the difference could be tax/shipping.
+    void needsReview_whenGrandTotalHigherThanLineSum_taxPossible() {
+        // Lines sum to 250000 but grand total is 290000 — could be tax.
+        // We flag NEEDS_REVIEW so a human can confirm whether it's tax or an error.
         var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 290000.0,
                 List.of(item("Item A", 5.0, 50000.0, 250000.0))));
 
-        // Should be COMPLETED (lines correct, grand total not touched)
-        assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED);
-        assertThat(result.corrections()).isEmpty();
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
+        assertThat(result.corrections()).isEmpty(); // no auto-correction
+        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("higher than"));
+    }
+
+    @Test
+    void corrected_whenGrandTotalLowerThanLineSum() {
+        // Lines sum to 250000 but grand total is 200000 → definitively wrong → auto-correct
+        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
+                List.of(item("Item A", 5.0, 50000.0, 250000.0))));
+
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED_WITH_CORRECTIONS);
+        assertThat(result.corrections()).anyMatch(c ->
+                c.field().equals("grandTotal") && c.correctedValue() == 250000.0);
     }
 
     // ── Rounding tolerance ────────────────────────────────────────────────────
@@ -177,36 +190,33 @@ class PoValidationServiceTest {
         assertThat(c.reason()).isNotBlank();
     }
 
-    // ── Grand-total mismatch: line sum > grand total → NEEDS_REVIEW ──────────
+    // ── Grand-total mismatch ──────────────────────────────────────────────────
 
     @Test
-    void needsReview_lineSumExceedsGrandTotal_twoLines() {
-        // 5 × 50000 = 250000, 10 × 15000 = 150000 → line sum = 400000
-        // but PO total = 800000. Wait — 800000 > 400000 so no NEEDS_REVIEW here.
-        // Correctly: the reverse scenario: line sum 400000, grand total 200000 → flag.
+    void correctedWithCorrections_grandTotalLowerThanLineSum_autoCorrects() {
+        // Line sum = 400000, grand total = 200000 → lineSum > grandTotal → auto-correct
         var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
                 List.of(
                         item("Item A", 5.0, 50000.0, 250000.0),
                         item("Item B", 10.0, 15000.0, 150000.0)
                 )));
-        // Line sum = 400000, grand total = 200000 → definitively wrong
-        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
-        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("exceeds"));
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED_WITH_CORRECTIONS);
+        assertThat(result.corrections()).anyMatch(c ->
+                c.field().equals("grandTotal") && c.correctedValue() == 400000.0);
+        assertThat(result.reviewReasons()).isEmpty();
     }
 
     @Test
-    void needsReview_lineSumExceedsGrandTotal_exactScenarioFromSpec() {
-        // The exact scenario described in the requirements:
-        // 5 × ₹50,000 = ₹2,50,000 and 10 × ₹15,000 = ₹1,50,000 → line sum = ₹4,00,000
-        // but PO total = ₹8,00,000 (2× the line sum → implausibly large for tax/surcharges).
+    void needsReview_grandTotalHigherThanLineSum_flaggedForReview() {
+        // Line sum = 400000, grand total = 800000 → grandTotal > lineSum → NEEDS_REVIEW
+        // (could be tax, could be error — human should decide)
         var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 800000.0,
                 List.of(
                         item("Item A", 5.0, 50000.0, 250000.0),
                         item("Item B", 10.0, 15000.0, 150000.0)
                 )));
-        // Line sum = 400000, grand total = 800000 (2× the line sum) → suspicious
         assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
-        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("400000") || r.contains("800000"));
+        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("higher than"));
     }
 
     // ── NEEDS_REVIEW ─────────────────────────────────────────────────────────
@@ -275,15 +285,29 @@ class PoValidationServiceTest {
     // ── Discounts/tax/shipping handling ──────────────────────────────────────
 
     @Test
-    void doesNotCorrectGrandTotal_whenTaxPresent() {
-        // Items sum to 1000, grand total is 1180 (likely tax = 180)
+    void needsReview_grandTotalHigherThanLineSum_possiblyTax() {
+        // Items sum to 1000, grand total is 1180 (likely tax = 180).
+        // We cannot tell if it's tax or an error → flag NEEDS_REVIEW so a human decides.
         var result = svc.validate(po("PO-100", "Supplier", "2024-03-01", 1180.0,
                 List.of(
                         item("Product A", 10.0, 50.0, 500.0),
                         item("Product B", 10.0, 50.0, 500.0)
                 )));
 
-        // Lines are correct, grand total differs — but we should not auto-correct
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
+        assertThat(result.corrections()).isEmpty(); // no auto-correction for high total
+        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("higher than"));
+    }
+
+    @Test
+    void completed_whenGrandTotalMatchesLineSum_exactlyNoTax() {
+        // Items sum to 1000, grand total is exactly 1000 → COMPLETED
+        var result = svc.validate(po("PO-100", "Supplier", "2024-03-01", 1000.0,
+                List.of(
+                        item("Product A", 10.0, 50.0, 500.0),
+                        item("Product B", 10.0, 50.0, 500.0)
+                )));
+
         assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED);
         assertThat(result.corrections()).isEmpty();
     }

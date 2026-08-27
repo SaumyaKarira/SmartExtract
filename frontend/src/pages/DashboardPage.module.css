@@ -86,6 +86,36 @@
   color: var(--gray-500);
 }
 
+/* Upload-more banner (shown when user already has POs) */
+.uploadMoreCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 18px 24px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.uploadMoreLeft {
+  min-width: 0;
+}
+
+.uploadMoreTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 3px;
+}
+
+.uploadMoreDesc {
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
 /* Empty state card */
 .emptyCard {
   background: var(--white);

@@ -21,24 +21,40 @@ public class LlmExtractionService {
     private static final String PROMPT_TEMPLATE = """
             Extract the following structured data from the Purchase Order text below.
             Return ONLY a valid JSON object with no markdown, no code fences, no explanation.
-            
+
+            Date rules (important):
+            - Always return dates in ISO 8601 format: yyyy-MM-dd (e.g. 2026-08-12 for 12 August 2026).
+            - Convert any date format found in the document to yyyy-MM-dd.
+              Examples: "12 Aug 2026" → "2026-08-12", "August 12, 2026" → "2026-08-12",
+              "12/08/2026" → "2026-08-12", "8/12/2026" → use document context to determine
+              day vs month order; default to dd/MM/yyyy (day first) if ambiguous.
+            - If no date can be determined, return null.
+
+            Number rules:
+            - All monetary values must be plain numbers with no currency symbols or commas.
+              Example: 2,50,000 → 250000.
+
             Required JSON schema:
             {
-              "poNumber": "string or null",
-              "vendorName": "string or null",
-              "poDate": "string or null",
+              "poNumber":     "string or null",
+              "vendorName":   "string or null",
+              "poDate":       "yyyy-MM-dd or null",
+              "deliveryDate": "yyyy-MM-dd or null",
               "paymentTerms": "string or null",
-              "totalAmount": number or null,
+              "currency":     "string or null (e.g. INR, USD)",
+              "subtotal":     number or null,
+              "tax":          number or null,
+              "totalAmount":  number or null,
               "items": [
                 {
-                  "description": "string",
-                  "quantity": number,
-                  "unitPrice": number,
-                  "totalPrice": number
+                  "description": "string or null",
+                  "quantity":    number or null,
+                  "unitPrice":   number or null,
+                  "totalPrice":  number or null
                 }
               ]
             }
-            
+
             Purchase Order text:
             ---
             %s

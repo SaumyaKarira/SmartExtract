@@ -40,7 +40,7 @@ const fmtCurrency = (val: number | null) =>
 
 const fmtDate = (val: string | null) => {
   if (!val) return '—';
-  try { return new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  try { return new Date(val).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }); }
   catch { return val; }
 };
 
@@ -181,20 +181,24 @@ export default function PODetailPage() {
               Original extracted values are shown below for reference.
             </p>
             <ul className={styles.correctionsList}>
-              {corrections.map((c, i) => (
-                <li key={i} className={styles.correctionsListItem}>
-                  <strong>{c.field}:</strong>{' '}
-                  {c.originalValue != null && (
-                    <span className={styles.correctionOriginal}>
-                      {c.originalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {corrections.map((c, i) => {
+                const isGrandTotal = c.field === 'grandTotal';
+                const label = isGrandTotal ? 'PO Total' : c.field;
+                return (
+                  <li key={i} className={styles.correctionsListItem}>
+                    <strong>{label}:</strong>{' '}
+                    {c.originalValue != null && (
+                      <span className={styles.correctionOriginal}>
+                        ₹{c.originalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    )}
+                    <span className={styles.correctionNew}>
+                      → ₹{c.correctedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
-                  )}
-                  <span className={styles.correctionNew}>
-                    → {c.correctedValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                  — {c.reason}
-                </li>
-              ))}
+                    {' '}— {c.reason}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
@@ -235,7 +239,10 @@ export default function PODetailPage() {
           <InfoField label="Vendor" value={po.supplier ?? '—'} />
           <InfoField label="PO Date" value={fmtDate(po.orderDate)} />
           <InfoField label="Payment Terms" value={po.paymentTerms ?? '—'} />
-          <InfoField label="Total Amount" value={fmtCurrency(po.total)} />
+          <InfoField
+            label={corrections.some(c => c.field === 'grandTotal') ? 'Total Amount (corrected)' : 'Total Amount'}
+            value={fmtCurrency(po.total)}
+          />
           {po.deliveryDate && <InfoField label="Delivery Date" value={fmtDate(po.deliveryDate)} />}
           {po.currency && <InfoField label="Currency" value={po.currency} />}
         </div>
@@ -280,8 +287,8 @@ export default function PODetailPage() {
           </div>
         )}
 
-        {/* Order Summary */}
-        {(po.subtotal != null || po.tax != null || po.total != null) && (
+        {/* Order Summary — only shown when subtotal or tax are available (total alone is already in the details grid) */}
+        {(po.subtotal != null || po.tax != null) && (
           <div className={styles.summarySection}>
             <h3 className={styles.summaryTitle}>Order Summary</h3>
             <div className={styles.summaryRows}>

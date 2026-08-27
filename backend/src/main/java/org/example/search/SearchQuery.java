@@ -16,15 +16,16 @@ public record SearchQuery(
         LocalDate dateFrom,
         LocalDate dateTo,
         String status,
-        String sortBy,        // "date" | "amount" | "poNumber" | "supplier"
-        String sortDir,       // "asc" | "desc"
+        String sortBy,          // "date" | "amount" | "poNumber" | "supplier"
+        String sortDir,         // "asc" | "desc"
         int page,
-        int pageSize
+        int pageSize,
+        boolean amountInclusive // true = >=/<= (filter form), false = >/<  (NL "above/below")
 ) {
-    /** Canonical defaults */
+    /** Canonical defaults — NL search uses strict comparisons */
     public static SearchQuery defaults() {
         return new SearchQuery(null, null, null, null, null, null, null, null,
-                "date", "desc", 0, 20);
+                "date", "desc", 0, 20, false);
     }
 }
 

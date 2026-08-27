@@ -6,7 +6,11 @@ public record ExtractedPurchaseOrder(
         String poNumber,
         String vendorName,
         String poDate,
+        String deliveryDate,
         String paymentTerms,
+        String currency,
+        Double subtotal,
+        Double tax,
         Double totalAmount,
         List<ExtractedLineItem> items
 ) {
@@ -17,4 +21,3 @@ public record ExtractedPurchaseOrder(
             Double totalPrice
     ) {}
 }
-

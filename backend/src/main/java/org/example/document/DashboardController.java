@@ -19,12 +19,21 @@ public class DashboardController {
     @GetMapping("/stats")
     public DashboardStats stats(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
+
+        // "completed" covers both clean completions and auto-corrected ones
+        long completed = documentRepository.countByUserIdAndStatus(userId, DocumentStatus.COMPLETED)
+                + documentRepository.countByUserIdAndStatus(userId, DocumentStatus.COMPLETED_WITH_CORRECTIONS);
+
+        // "needsReview" covers only NEEDS_REVIEW (data-quality issues)
+        long needsReview = documentRepository.countByUserIdAndStatus(userId, DocumentStatus.NEEDS_REVIEW);
+
+        long failed = documentRepository.countByUserIdAndStatus(userId, DocumentStatus.FAILED);
+
         return new DashboardStats(
                 documentRepository.countByUserId(userId),
-                documentRepository.countByUserIdAndStatus(userId, DocumentStatus.COMPLETED),
-                documentRepository.countByUserIdAndStatus(userId, DocumentStatus.PROCESSING),
-                documentRepository.countByUserIdAndStatus(userId, DocumentStatus.FAILED)
+                completed,
+                needsReview,
+                failed
         );
     }
 }
-

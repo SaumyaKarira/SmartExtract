@@ -24,7 +24,6 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
       .toUpperCase()
       .slice(0, 2) ?? 'U';
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -41,7 +40,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
   return (
     <div className={styles.userMenuWrap} ref={ref}>
       <button
-        className={styles.userArea}
+        className={`${styles.userArea} ${collapsed ? styles.userAreaCollapsed : ''}`}
         onClick={() => setOpen((v) => !v)}
         title={collapsed ? user?.name : undefined}
         aria-label="User menu"
@@ -89,7 +88,12 @@ function Sidebar({ collapsed, onCollapse }: { collapsed: boolean; onCollapse: ()
         <div className={styles.logoMark}>SE</div>
         {!collapsed && <span className={styles.brandName}>SmartExtract</span>}
         <button className={styles.collapseBtn} onClick={onCollapse} aria-label="Toggle sidebar">
-          {collapsed ? '→' : '←'}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {collapsed
+              ? <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              : <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            }
+          </svg>
         </button>
       </div>
 
@@ -153,4 +157,3 @@ export default function AppLayout() {
     </div>
   );
 }
-

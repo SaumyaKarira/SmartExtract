@@ -53,7 +53,7 @@
 }
 
 .sidebar.collapsed {
-  width: 72px;
+  width: 64px;
 }
 
 @media (max-width: 767px) {
@@ -69,21 +69,16 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 20px 16px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--gray-100);
-  min-height: 68px;
-  /* Allow the collapse button to always be reachable — no clipping */
-  position: relative;
+  height: 64px;
+  flex-shrink: 0;
 }
 
-/* When collapsed: center the logo + show the collapse button centred below/beside it */
 .sidebar.collapsed .brand {
   justify-content: center;
-  align-items: center;
-  padding: 0;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 68px;
+  padding: 0 8px;
+  gap: 0;
 }
 
 .logoMark {
@@ -102,7 +97,7 @@
 }
 
 .brandName {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--blue-700);
   letter-spacing: -0.2px;
@@ -113,28 +108,22 @@
 .collapseBtn {
   background: none;
   border: 1px solid var(--gray-200);
-  padding: 5px 7px;
-  border-radius: 6px;
-  font-size: 14px;
-  color: var(--gray-400);
-  flex-shrink: 0;
-  margin-left: auto;
-  line-height: 1;
-  /* Ensure the button is always fully visible and never clipped */
-  position: relative;
-  z-index: 1;
-  cursor: pointer;
-}
-
-/* When sidebar is collapsed the button should be centered beneath the logo */
-.sidebar.collapsed .collapseBtn {
-  margin-left: 0;
-  width: 32px;
+  padding: 0;
+  width: 28px;
   height: 28px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  color: var(--gray-400);
+  flex-shrink: 0;
+  margin-left: auto;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.sidebar.collapsed .collapseBtn {
+  margin-left: 0;
 }
 
 .collapseBtn:hover {
@@ -150,7 +139,7 @@
 /* Nav */
 .nav {
   flex: 1;
-  padding: 12px 8px;
+  padding: 10px 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -169,6 +158,11 @@
   text-decoration: none;
   white-space: nowrap;
   transition: background 0.12s, color 0.12s;
+}
+
+.sidebar.collapsed .navItem {
+  justify-content: center;
+  padding: 9px 0;
 }
 
 .navItem:hover {
@@ -201,23 +195,30 @@
 .userMenuWrap {
   position: relative;
   border-top: 1px solid var(--gray-100);
+  padding: 8px;
 }
 
 .userArea {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 12px;
-  min-height: 68px;
+  padding: 10px 10px;
   width: 100%;
   background: none;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
   text-align: left;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
 }
 
 .userArea:hover {
   background: var(--gray-50);
+  border-color: var(--gray-200);
+}
+
+.userAreaCollapsed {
+  justify-content: center;
+  padding: 10px 0;
 }
 
 .avatar {
@@ -269,7 +270,7 @@
 /* Profile dropdown menu */
 .profileMenu {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 4px);
   left: 8px;
   right: 8px;
   background: var(--white);
@@ -284,7 +285,7 @@
 .profileMenuCollapsed {
   left: 0;
   right: auto;
-  width: 200px;
+  width: 210px;
 }
 
 @keyframes menuPop {
@@ -380,7 +381,7 @@
 }
 
 .topbar {
-  height: 68px;
+  height: 64px;
   background: var(--white);
   border-bottom: 1px solid var(--gray-200);
   display: flex;
@@ -436,4 +437,3 @@
 @media (max-width: 767px) {
   .pageContent { padding: 20px 16px; }
 }
-

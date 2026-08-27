@@ -25,6 +25,15 @@
   color: var(--gray-500);
 }
 
+.pageHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
 .countBadge {
   font-size: 13px;
   font-weight: 600;
@@ -34,7 +43,95 @@
   color: var(--blue-600);
   border: 1px solid var(--blue-100);
   white-space: nowrap;
-  align-self: flex-start;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+/* Export button / dropdown */
+.exportWrap {
+  position: relative;
+}
+
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  height: 36px;
+  border: 1.5px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--gray-700);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.exportBtn:hover:not(:disabled) {
+  background: var(--gray-50);
+  border-color: var(--gray-400);
+  color: var(--gray-900);
+}
+
+.exportBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.exportMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  min-width: 188px;
+  overflow: hidden;
+  animation: menuPop 0.14s ease;
+}
+
+@keyframes menuPop {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.exportMenuItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid var(--gray-100);
+  transition: background 0.1s;
+  gap: 1px;
+}
+
+.exportMenuItem:last-child { border-bottom: none; }
+.exportMenuItem:hover { background: var(--gray-50); }
+
+.exportMenuLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.exportMenuExt {
+  font-weight: 400;
+  color: var(--gray-400);
+}
+
+.exportMenuDesc {
+  font-size: 11px;
+  color: var(--gray-400);
 }
 
 /* Controls */
@@ -226,7 +323,8 @@
 }
 
 .tdRight { text-align: right; }
-.tdAction { width: 40px; text-align: right; }
+.tdAction { width: 52px; text-align: right; padding-right: 12px; }
+.thAction { width: 52px; }
 
 .poNumber {
   font-weight: 700;
@@ -263,6 +361,27 @@
 .tr:hover .viewArrow {
   color: var(--blue-500);
   transform: translateX(3px);
+}
+
+/* Delete row button */
+.deleteRowBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--gray-400);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.deleteRowBtn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
 }
 
 /* Status badges */

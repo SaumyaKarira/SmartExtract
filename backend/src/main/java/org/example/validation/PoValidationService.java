@@ -19,7 +19,8 @@ import java.util.List;
  * <ul>
  *   <li>COMPLETED — all required info valid, no corrections needed.</li>
  *   <li>COMPLETED_WITH_CORRECTIONS — calculation errors auto-corrected from reliable source values.</li>
- *   <li>NEEDS_REVIEW — business/source fields missing, invalid, or ambiguous.</li>
+ *   <li>NEEDS_REVIEW — business/source fields missing, invalid, or ambiguous; or line-item sum
+ *       does not match the extracted PO total and it is not safe to auto-correct.</li>
  *   <li>FAILED — handled upstream; this service never returns FAILED.</li>
  * </ul>
  */
@@ -61,8 +62,14 @@ public class PoValidationService {
         List<ExtractedPurchaseOrder.ExtractedLineItem> items =
                 extracted.items() != null ? extracted.items() : List.of();
 
+        // validLineTotals accumulates the "best known" total for each line.
         List<BigDecimal> validLineTotals = new ArrayList<>();
-        boolean subtotalComputable = true; // flip to false if any line is not correctable
+
+        // allLinesComputable: true only when EVERY line had qty+unitPrice available
+        // (i.e. we computed the line total from first principles for all lines).
+        // If even one line is missing qty or unitPrice we can still sum the line totals
+        // Gemini reported, but we cannot safely override the grand total.
+        boolean allLinesFullyComputed = true;
 
         for (int i = 0; i < items.size(); i++) {
             ExtractedPurchaseOrder.ExtractedLineItem item = items.get(i);
@@ -72,18 +79,18 @@ public class PoValidationService {
             Double unitPrice = item.unitPrice();
             Double totalPrice = item.totalPrice();
 
-            // Invalid / negative quantity → needs review
+            // Invalid / negative quantity → needs review; skip this line for sum
             if (qty != null && qty <= 0) {
                 reviewReasons.add(itemPrefix + ": quantity " + qty + " is invalid (must be > 0).");
-                subtotalComputable = false;
-                continue; // can't reliably compute line total
+                allLinesFullyComputed = false;
+                continue;
             }
 
             if (qty != null && unitPrice != null) {
                 BigDecimal expectedTotal = bd(qty).multiply(bd(unitPrice)).setScale(2, RoundingMode.HALF_UP);
 
                 if (totalPrice == null) {
-                    // Missing line total — fill it in
+                    // Missing line total — fill it in deterministically
                     corrections.add(new ValidationResult.Correction(
                             itemPrefix + ".totalPrice",
                             null,
@@ -92,82 +99,93 @@ public class PoValidationService {
                     ));
                     validLineTotals.add(expectedTotal);
                 } else {
-                    BigDecimal extractedTotal = bd(totalPrice).setScale(2, RoundingMode.HALF_UP);
-                    if (deviation(expectedTotal, extractedTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
+                    BigDecimal extractedLineTotal = bd(totalPrice).setScale(2, RoundingMode.HALF_UP);
+                    if (deviation(expectedTotal, extractedLineTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
+                        // Line total is inconsistent with qty × unitPrice — correct it
                         corrections.add(new ValidationResult.Correction(
                                 itemPrefix + ".totalPrice",
                                 totalPrice,
                                 expectedTotal.doubleValue(),
                                 "Corrected: " + qty + " × " + unitPrice + " = " + expectedTotal +
-                                        " (extracted value was " + extractedTotal + ")."
+                                        " (extracted value was " + extractedLineTotal + ")."
                         ));
                         validLineTotals.add(expectedTotal);
                     } else {
                         // Within tolerance — keep original (normalised to 2dp)
-                        validLineTotals.add(extractedTotal);
+                        validLineTotals.add(extractedLineTotal);
                     }
                 }
             } else {
-                // qty or unitPrice missing — can't verify; keep as-is but track for subtotal
+                // qty or unitPrice missing — cannot verify the line total from first principles
+                allLinesFullyComputed = false;
                 if (totalPrice != null && totalPrice > 0) {
                     validLineTotals.add(bd(totalPrice).setScale(2, RoundingMode.HALF_UP));
-                } else {
-                    subtotalComputable = false;
                 }
+                // If totalPrice is also null/zero, we simply have nothing reliable to add;
+                // the grand-total check below will not be able to run a full cross-check.
             }
         }
 
-        // ── 3. Subtotal correction ────────────────────────────────────────────
+        // ── 3. Grand-total cross-check ────────────────────────────────────────
+        //
+        // Policy (applies only when allLinesFullyComputed = true, so every line total
+        // was derived from qty × unitPrice and we have a reliable line sum):
+        //
+        //  A) Line sum > grand total (by more than tolerance):
+        //     Definitively wrong — surcharges cannot reduce the total below the item sum.
+        //     → NEEDS_REVIEW.
+        //
+        //  B) Grand total > line sum but within a plausible surcharge margin (≤ 50%):
+        //     Acceptable — the difference may be tax, shipping, or other surcharges.
+        //     → No flag.
+        //
+        //  C) Grand total > line sum by more than 50% of the line sum:
+        //     Implausibly large surcharge — almost certainly a data error.
+        //     → NEEDS_REVIEW.
+        //
+        //  D) Grand total is negative → always NEEDS_REVIEW.
+        //
+        // When allLinesFullyComputed = false we can only apply rule A (partial sum
+        // already exceeds total → definitively wrong) and D.
 
-        if (subtotalComputable && !validLineTotals.isEmpty()) {
-            BigDecimal computedSubtotal = validLineTotals.stream()
+        if (!validLineTotals.isEmpty() && extracted.totalAmount() != null) {
+            BigDecimal computedLineSum = validLineTotals.stream()
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .setScale(2, RoundingMode.HALF_UP);
 
-            // We don't have a separate subtotal field in ExtractedPurchaseOrder right now,
-            // but we may derive/correct the grand total using it (see step 4).
-            // Expose computed subtotal via corrections if totalAmount was provided.
-        }
+            BigDecimal extractedGrandTotal = bd(extracted.totalAmount()).setScale(2, RoundingMode.HALF_UP);
 
-        // ── 4. Grand-total correction (only when deterministically computable) ─
-
-        if (subtotalComputable && !validLineTotals.isEmpty()) {
-            BigDecimal computedSubtotal = validLineTotals.stream()
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .setScale(2, RoundingMode.HALF_UP);
-
-            Double extractedTotal = extracted.totalAmount();
-
-            if (extractedTotal != null) {
-                BigDecimal extTotalBd = bd(extractedTotal).setScale(2, RoundingMode.HALF_UP);
-
-                // Grand total may include tax, discount, shipping etc.
-                // We can ONLY auto-correct if there is exactly one component: the line-item sum.
-                // i.e. grandTotal should equal computedSubtotal (no other adjustments).
-                // We detect "no other adjustments" by checking if the extracted grand total
-                // is close to the sum of line totals.  If adjustments are present the
-                // extracted total will differ by more than tolerance — leave it alone.
-                if (deviation(computedSubtotal, extTotalBd).compareTo(ROUNDING_TOLERANCE) > 0) {
-                    // Grand total differs from sum of lines.
-                    // If ALL lines were reliable (no qty issues), we assume line totals
-                    // are the ground truth and flag the grand total.
-                    // But we CANNOT know if the difference is tax/discount/shipping.
-                    // DO NOT auto-correct — flag for review only if the total looks impossible.
-
-                    // Negative grand total is always a review reason.
-                    if (extractedTotal < 0) {
-                        reviewReasons.add("Grand total is negative (" + extractedTotal + ").");
-                    }
-                    // Otherwise, trust Gemini's grand total — differences might be tax/discount/shipping.
-                    // No correction applied.
-                } else if (deviation(computedSubtotal, extTotalBd).compareTo(ROUNDING_TOLERANCE) <= 0
-                        && items.size() > 0) {
-                    // Grand total matches computed subtotal within tolerance — no correction needed.
+            // (D) Negative grand total
+            if (extracted.totalAmount() < 0) {
+                reviewReasons.add("Grand total is negative (" + extracted.totalAmount() + "). Please review.");
+            }
+            // (A) Line sum EXCEEDS grand total — definitively wrong
+            else if (computedLineSum.compareTo(extractedGrandTotal) > 0
+                    && deviation(computedLineSum, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
+                reviewReasons.add(
+                        "Line-item sum (" + computedLineSum + ") exceeds the extracted PO total ("
+                                + extractedGrandTotal + "). "
+                                + "The shortfall (" + deviation(computedLineSum, extractedGrandTotal)
+                                + ") cannot be explained by tax or surcharges. Please verify the PO total."
+                );
+            }
+            // (C) Grand total implausibly larger than line sum (only when all lines were fully computed)
+            else if (allLinesFullyComputed && computedLineSum.compareTo(BigDecimal.ZERO) > 0) {
+                // Compute ratio: grandTotal / lineSum
+                BigDecimal ratio = extractedGrandTotal.divide(computedLineSum, 4, RoundingMode.HALF_UP);
+                // If grand total > 1.5 × line sum, flag as suspicious
+                if (ratio.compareTo(new BigDecimal("1.50")) > 0) {
+                    reviewReasons.add(
+                            "Extracted PO total (" + extractedGrandTotal + ") is " + ratio
+                                    + "× the line-item sum (" + computedLineSum + "). "
+                                    + "This is implausibly large for tax/surcharges alone. Please verify the PO total."
+                    );
                 }
             }
+            // (B) Grand total >= line sum within plausible range — acceptable (tax/discount/shipping).
         }
 
-        // ── 5. Determine outcome ──────────────────────────────────────────────
+        // ── 4. Determine outcome ──────────────────────────────────────────────
 
         DocumentStatus outcome;
         if (!reviewReasons.isEmpty()) {
@@ -181,7 +199,7 @@ public class PoValidationService {
         return new ValidationResult(outcome, List.copyOf(corrections), List.copyOf(reviewReasons));
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── Private helpers ─────────────────────────���─────────────────────────────
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();

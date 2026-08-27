@@ -133,7 +133,9 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px 24px 0;
+  padding: 20px 24px 16px;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-100);
 }
 
 .avatarLarge {
@@ -170,7 +172,7 @@
 .divider {
   height: 1px;
   background: var(--gray-100);
-  margin: 0 24px;
+  margin: 0;
 }
 
 /* Field group */

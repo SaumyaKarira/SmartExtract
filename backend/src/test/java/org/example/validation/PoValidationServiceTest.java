@@ -64,9 +64,10 @@ class PoValidationServiceTest {
     // ── Incorrect line totals → automatic correction ──────────────────────────
 
     @Test
-    void correctedWithCorrections_whenLineTotalWrong() {
-        // 5 × 50000 = 250000, but Gemini returned 200000
-        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
+    void correctedWithCorrections_whenLineTotalWrong_grandTotalMatchesCorrected() {
+        // 5 × 50000 = 250000; extracted line total is wrong (200000) but grand total
+        // matches the CORRECTED sum (250000) → safe to correct, no ambiguity.
+        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 250000.0,
                 List.of(item("Item A", 5.0, 50000.0, 200000.0))));
 
         assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED_WITH_CORRECTIONS);
@@ -77,6 +78,20 @@ class PoValidationServiceTest {
         assertThat(correction.originalValue()).isEqualTo(200000.0);
         assertThat(correction.correctedValue()).isEqualTo(250000.0);
         assertThat(correction.reason()).contains("5.0 × 50000.0");
+    }
+
+    @Test
+    void needsReview_whenLineTotalCorrectedButGrandTotalStillMismatches() {
+        // 5 × 50000 = 250000; extracted line total is wrong (200000) AND the grand total
+        // is also 200000. After correcting the line, line sum (250000) > grand total (200000).
+        // Cannot determine which value is authoritative → NEEDS_REVIEW.
+        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
+                List.of(item("Item A", 5.0, 50000.0, 200000.0))));
+
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
+        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("exceeds"));
+        // The line-level correction is still recorded even though status is NEEDS_REVIEW
+        assertThat(result.corrections()).hasSize(1);
     }
 
     @Test
@@ -151,13 +166,47 @@ class PoValidationServiceTest {
 
     @Test
     void correctionPreservesOriginalValueAndReason() {
-        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
+        // Grand total matches the corrected line sum — safe correction, no ambiguity.
+        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 250000.0,
                 List.of(item("Item A", 5.0, 50000.0, 200000.0))));
 
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.COMPLETED_WITH_CORRECTIONS);
         var c = result.corrections().get(0);
         assertThat(c.originalValue()).isEqualTo(200000.0);
         assertThat(c.correctedValue()).isEqualTo(250000.0);
         assertThat(c.reason()).isNotBlank();
+    }
+
+    // ── Grand-total mismatch: line sum > grand total → NEEDS_REVIEW ──────────
+
+    @Test
+    void needsReview_lineSumExceedsGrandTotal_twoLines() {
+        // 5 × 50000 = 250000, 10 × 15000 = 150000 → line sum = 400000
+        // but PO total = 800000. Wait — 800000 > 400000 so no NEEDS_REVIEW here.
+        // Correctly: the reverse scenario: line sum 400000, grand total 200000 → flag.
+        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 200000.0,
+                List.of(
+                        item("Item A", 5.0, 50000.0, 250000.0),
+                        item("Item B", 10.0, 15000.0, 150000.0)
+                )));
+        // Line sum = 400000, grand total = 200000 → definitively wrong
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
+        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("exceeds"));
+    }
+
+    @Test
+    void needsReview_lineSumExceedsGrandTotal_exactScenarioFromSpec() {
+        // The exact scenario described in the requirements:
+        // 5 × ₹50,000 = ₹2,50,000 and 10 × ₹15,000 = ₹1,50,000 → line sum = ₹4,00,000
+        // but PO total = ₹8,00,000 (2× the line sum → implausibly large for tax/surcharges).
+        var result = svc.validate(po("PO-001", "ACME", "2024-01-15", 800000.0,
+                List.of(
+                        item("Item A", 5.0, 50000.0, 250000.0),
+                        item("Item B", 10.0, 15000.0, 150000.0)
+                )));
+        // Line sum = 400000, grand total = 800000 (2× the line sum) → suspicious
+        assertThat(result.outcome()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
+        assertThat(result.reviewReasons()).anyMatch(r -> r.contains("400000") || r.contains("800000"));
     }
 
     // ── NEEDS_REVIEW ─────────────────────────────────────────────────────────

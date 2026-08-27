@@ -165,6 +165,7 @@ public class PurchaseOrderSearchService {
 
         return new PurchaseOrderResponse(
                 po.getId(), po.getUser().getId(), po.getDocument().getId(),
+                po.getDocument().getFileName(),
                 po.getPoNumber(), po.getSupplier(), po.getOrderDate(), po.getDeliveryDate(),
                 po.getPaymentTerms(), po.getCurrency(), po.getSubtotal(), po.getTax(),
                 po.getTotal(), po.getCreatedAt(), items, status,

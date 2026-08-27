@@ -1,6 +1,11 @@
 /* Welcome */
 .welcomeRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 28px;
+  flex-wrap: wrap;
 }
 
 .welcomeHeading {
@@ -12,15 +17,37 @@
 }
 
 .welcomeSub {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--gray-500);
+}
+
+.uploadCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: var(--blue-600);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.uploadCta:hover {
+  background: var(--blue-700);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
 }
 
 /* Stats */
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
   margin-bottom: 28px;
 }
 
@@ -28,7 +55,7 @@
   background: var(--white);
   border: 1px solid var(--gray-200);
   border-radius: 12px;
-  padding: 20px;
+  padding: 18px 20px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -54,7 +81,8 @@
 }
 
 .statLabel {
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--gray-500);
 }
 
@@ -62,44 +90,42 @@
 .emptyCard {
   background: var(--white);
   border: 1.5px dashed var(--gray-300);
-  border-radius: 16px;
-  padding: 56px 32px;
+  border-radius: 14px;
+  padding: 40px 32px;
   text-align: center;
   margin-bottom: 28px;
-}
-
-.emptyIllustration {
   display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
+  flex-direction: column;
+  align-items: center;
 }
 
 .emptyIconBg {
-  width: 80px;
-  height: 80px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   background: var(--blue-50);
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 16px;
 }
 
 .emptyIcon {
-  font-size: 36px;
+  font-size: 28px;
 }
 
 .emptyHeading {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--gray-800);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .emptyText {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--gray-500);
-  max-width: 420px;
-  margin: 0 auto 28px;
+  max-width: 400px;
+  margin: 0 auto 24px;
   line-height: 1.6;
 }
 
@@ -107,12 +133,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 10px 22px;
   background: var(--blue-600);
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   transition: background 0.15s, box-shadow 0.15s;
 }
@@ -123,7 +149,7 @@
 }
 
 .uploadBtnIcon {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 400;
   line-height: 1;
 }
@@ -132,29 +158,23 @@
 .featureGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .featureCard {
   background: var(--white);
   border: 1px solid var(--gray-200);
   border-radius: 12px;
-  padding: 24px;
-  transition: box-shadow 0.15s, border-color 0.15s;
-}
-
-.featureCard:hover {
-  border-color: var(--blue-200);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.08);
+  padding: 22px;
 }
 
 .featureIconWrap {
-  font-size: 28px;
-  margin-bottom: 12px;
+  font-size: 26px;
+  margin-bottom: 10px;
 }
 
 .featureTitle {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--gray-800);
   margin-bottom: 6px;

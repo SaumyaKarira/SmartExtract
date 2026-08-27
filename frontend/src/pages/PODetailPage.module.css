@@ -49,14 +49,14 @@
 /* ── Page Header ─────────────────────────────────────────────────────── */
 .pageHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
-.pageHeaderLeft { flex: 1; }
+.pageHeaderLeft { flex: 1; min-width: 0; }
 
 .pageTitle {
   font-size: 12px;
@@ -68,19 +68,23 @@
 }
 
 .poHeading {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 800;
   color: var(--gray-900);
   letter-spacing: -0.5px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.vendorName { font-size: 15px; color: var(--gray-500); }
+.vendorName { font-size: 14px; color: var(--gray-500); }
 
 .pageHeaderRight {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
   flex-wrap: wrap;
 }
 
@@ -381,17 +385,18 @@ details[open] .sourceTextChevron { transform: rotate(90deg); }
 .deleteDocBtn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.9rem;
+  gap: 6px;
+  padding: 0 14px;
+  height: 34px;
   border-radius: 8px;
   border: 1.5px solid #fca5a5;
-  background: #fff5f5;
+  background: var(--white);
   color: #dc2626;
-  font-size: 0.82rem;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
-  margin-left: 0.5rem;
+  white-space: nowrap;
 }
 .deleteDocBtn:hover {
   background: #fef2f2;

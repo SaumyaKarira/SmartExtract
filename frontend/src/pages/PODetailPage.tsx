@@ -67,6 +67,7 @@ export default function PODetailPage() {
   const extractedText: string | null = location.state?.extractedText ?? null;
   const fromUpload: boolean = location.state?.fromUpload === true;
   const fromSearch: boolean = location.state?.fromSearch === true;
+  const fromPoList: boolean = location.state?.from === 'po-list';
   const searchState: SearchState | null = location.state?.searchState ?? null;
 
   useEffect(() => {
@@ -120,6 +121,16 @@ export default function PODetailPage() {
           onClick={() => navigate('/dashboard/search', { state: searchState ?? undefined })}
         >
           ← Back to Search Results
+        </button>
+      )}
+
+      {/* ── Back to Purchase Orders ───────────────────────────────────────── */}
+      {fromPoList && !fromSearch && (
+        <button
+          className={styles.backToSearch}
+          onClick={() => navigate('/dashboard/purchase-orders')}
+        >
+          ← Back to Purchase Orders
         </button>
       )}
 

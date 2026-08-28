@@ -144,9 +144,8 @@ public class RuleBasedQueryParser {
         }
 
         // ── Status ──────────────────────────────────────────────────────────
-        // Use "COMPLETED_ANY" as a sentinel meaning COMPLETED + COMPLETED_WITH_CORRECTIONS
         if (STATUS_CORRECTED.matcher(q).find())          { status = "COMPLETED_WITH_CORRECTIONS"; matched = true; }
-        else if (STATUS_COMPLETED.matcher(q).find())     { status = "COMPLETED_ANY"; matched = true; }
+        else if (STATUS_COMPLETED.matcher(q).find())     { status = "COMPLETED"; matched = true; }
         else if (STATUS_NEEDS_REVIEW.matcher(q).find()) { status = "NEEDS_REVIEW"; matched = true; }
         else if (STATUS_PROCESSING.matcher(q).find())   { status = "PROCESSING";   matched = true; }
         else if (STATUS_FAILED.matcher(q).find())        { status = "FAILED";       matched = true; }

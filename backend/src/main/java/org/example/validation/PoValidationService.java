@@ -151,38 +151,65 @@ public class PoValidationService {
 
             BigDecimal extractedGrandTotal = bd(extracted.totalAmount()).setScale(2, RoundingMode.HALF_UP);
 
+            // Tax amount extracted from document (may be null or zero)
+            BigDecimal taxAmount = (extracted.tax() != null && extracted.tax() > 0)
+                    ? bd(extracted.tax()).setScale(2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+
+            // Effective total = line item sum + tax. If tax is present in the document,
+            // the grand total is expected to be lineSum + tax, not lineSum alone.
+            BigDecimal effectiveLineTotal = computedLineSum.add(taxAmount).setScale(2, RoundingMode.HALF_UP);
+
             // Negative grand total
             if (extracted.totalAmount() < 0) {
                 reviewReasons.add("The extracted PO total is negative (" + extractedGrandTotal + "). Please verify.");
             } else if (allLinesFullyComputed
-                    && deviation(computedLineSum, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
+                    && deviation(effectiveLineTotal, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
 
-                if (computedLineSum.compareTo(extractedGrandTotal) > 0) {
-                    // Line sum EXCEEDS stated total — definitively wrong; auto-correct
+                if (effectiveLineTotal.compareTo(extractedGrandTotal) > 0) {
+                    // Line sum + tax EXCEEDS stated total — definitively wrong; auto-correct
                     corrections.add(new ValidationResult.Correction(
                             "grandTotal",
                             extracted.totalAmount(),
-                            computedLineSum.doubleValue(),
-                            "PO total corrected to match the sum of line items ("
-                                    + computedLineSum + "). Extracted value was " + extractedGrandTotal + "."
+                            effectiveLineTotal.doubleValue(),
+                            "PO total corrected to match the sum of line items + tax ("
+                                    + computedLineSum + (taxAmount.compareTo(BigDecimal.ZERO) > 0 ? " + " + taxAmount : "")
+                                    + " = " + effectiveLineTotal + "). Extracted value was " + extractedGrandTotal + "."
                     ));
                 } else {
-                    // Grand total HIGHER than line sum — could be tax/shipping; flag for review
+                    // Grand total still HIGHER than lineSum + tax — unexplained discrepancy; flag for review
                     reviewReasons.add(
                             "The extracted PO total (" + extractedGrandTotal
-                                    + ") is higher than the sum of line items (" + computedLineSum
-                                    + "). This may indicate tax or additional charges not listed as line items, "
-                                    + "or a data error. Please verify."
+                                    + ") is higher than the sum of line items"
+                                    + (taxAmount.compareTo(BigDecimal.ZERO) > 0 ? " + tax (" + computedLineSum + " + " + taxAmount + " = " + effectiveLineTotal + ")" : " (" + computedLineSum + ")")
+                                    + ". This may indicate additional charges not captured, or a data error. Please verify."
                     );
                 }
             } else if (!allLinesFullyComputed
-                    && computedLineSum.compareTo(extractedGrandTotal) > 0
-                    && deviation(computedLineSum, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
-                // Partial sum already exceeds total — impossible
+                    && effectiveLineTotal.compareTo(extractedGrandTotal) > 0
+                    && deviation(effectiveLineTotal, extractedGrandTotal).compareTo(ROUNDING_TOLERANCE) > 0) {
+                // Partial sum + tax already exceeds total — impossible
                 reviewReasons.add(
-                        "The sum of extractable line items (" + computedLineSum
-                                + ") already exceeds the PO total (" + extractedGrandTotal
+                        "The sum of extractable line items" + (taxAmount.compareTo(BigDecimal.ZERO) > 0 ? " + tax" : "")
+                                + " (" + effectiveLineTotal + ") already exceeds the PO total (" + extractedGrandTotal
                                 + "). Please verify the totals."
+                );
+            }
+        }
+
+        // ── 3b. Explicit subtotal + tax = total cross-check ──────────────────────
+        // When all three header-level amounts are present, verify their relationship.
+        if (extracted.subtotal() != null && extracted.tax() != null && extracted.totalAmount() != null
+                && extracted.subtotal() > 0 && extracted.tax() >= 0 && extracted.totalAmount() > 0) {
+            BigDecimal subtotal = bd(extracted.subtotal()).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal tax      = bd(extracted.tax()).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal total    = bd(extracted.totalAmount()).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal expected = subtotal.add(tax).setScale(2, RoundingMode.HALF_UP);
+            if (deviation(expected, total).compareTo(ROUNDING_TOLERANCE) > 0) {
+                reviewReasons.add(
+                        "Header-level amounts inconsistent: subtotal (" + subtotal
+                                + ") + tax (" + tax + ") = " + expected
+                                + " but extracted total is " + total + ". Please verify."
                 );
             }
         }

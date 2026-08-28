@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import styles from './PurchaseOrdersPage.module.css';
 import DeleteDocumentModal from '../components/DeleteDocumentModal';
+import UploadModal from '../components/UploadModal';
 
 const PAGE_SIZE = 10;
 
@@ -70,7 +71,7 @@ const ChevronDownIcon = () => (
 );
 
 const RefreshIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="1 4 1 10 7 10"/>
     <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
   </svg>
@@ -100,8 +101,20 @@ export default function PurchaseOrdersPage() {
   const [exportLoading, setExportLoading] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ documentId: number; fileName: string; poId: number | null } | null>(null);
-  const [retryingDocId, setRetryingDocId] = useState<number | null>(null);
-  const [retryErrors, setRetryErrors] = useState<Record<number, string>>({});
+  const [retryDocumentId, setRetryDocumentId] = useState<number | null>(null);
+
+  const handleRetrySuccess = async (poId: number | null, _status: string) => {
+    setRetryDocumentId(null);
+    if (poId) {
+      navigate(`/dashboard/po/${poId}`, { state: { from: 'po-list' } });
+    } else {
+      // Still failed — refresh list so failed card updates
+      try {
+        const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
+        setPos(data);
+      } catch { /* ignore */ }
+    }
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -134,48 +147,6 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  interface DocumentResponse {
-    id: number;
-    purchaseOrderId: number | null;
-    status: string;
-    errorMessage: string | null;
-    retryable: boolean;
-    retryProcessing: boolean;
-  }
-
-  const handleRetry = (documentId: number) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf,.docx';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      setRetryingDocId(documentId);
-      setRetryErrors(prev => { const n = { ...prev }; delete n[documentId]; return n; });
-      const formData = new FormData();
-      formData.append('file', file);
-      try {
-        const resp = await api.postForm<DocumentResponse>(`/api/documents/${documentId}/retry`, formData);
-        if (resp && resp.purchaseOrderId) {
-          navigate(`/dashboard/po/${resp.purchaseOrderId}`, { state: { from: 'po-list' } });
-        } else {
-          // Retry submitted but still processing or failed — refresh list
-          const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
-          setPos(data);
-        }
-      } catch (err) {
-        setRetryErrors(prev => ({ ...prev, [documentId]: err instanceof Error ? err.message : 'Retry failed.' }));
-        // Refresh list to reflect any server-side status update
-        try {
-          const data = await api.get<PurchaseOrder[]>('/api/purchase-orders');
-          setPos(data);
-        } catch { /* ignore secondary error */ }
-      } finally {
-        setRetryingDocId(null);
-      }
-    };
-    input.click();
-  };
 
   useEffect(() => {
     api.get<PurchaseOrder[]>('/api/purchase-orders')
@@ -342,20 +313,17 @@ export default function PurchaseOrdersPage() {
                                   <span className={styles.failedFileName}>{po.fileName}</span>
                                   {po.retryable && (
                                     <button
-                                      className={styles.refreshBtn}
-                                      disabled={retryingDocId === po.documentId}
-                                      onClick={() => handleRetry(po.documentId)}
-                                      title={retryingDocId === po.documentId ? 'Retrying…' : 'Re-upload and reprocess this document'}
+                                      className={styles.retryBtn}
+                                      onClick={() => setRetryDocumentId(po.documentId)}
+                                      title="Re-upload and reprocess this document"
                                     >
                                       <RefreshIcon />
+                                      Retry
                                     </button>
                                   )}
                                 </div>
                                 {po.errorMessage && (
                                   <span className={styles.failedErrorMsg}>{po.errorMessage}</span>
-                                )}
-                                {retryErrors[po.documentId] && (
-                                  <span className={styles.failedRetryError}>{retryErrors[po.documentId]}</span>
                                 )}
                               </div>
                             </div>
@@ -435,6 +403,12 @@ export default function PurchaseOrdersPage() {
         }}
       />
     )}
+    <UploadModal
+      open={retryDocumentId != null}
+      onClose={() => setRetryDocumentId(null)}
+      retryDocumentId={retryDocumentId ?? undefined}
+      onSuccess={(poId, status) => handleRetrySuccess(poId, status)}
+    />
   </>
   );
 }

@@ -10,8 +10,6 @@ interface Props {
   onSuccess?: (poId: number | null, status: string, extractedText: string | null, fileName: string) => void;
   /** If provided, the modal opens directly in retry mode for this document */
   retryDocumentId?: number;
-  /** Pre-selected file for retry (may be undefined if user revisited the page) */
-  retryFile?: File;
 }
 
 interface UploadApiResponse {
@@ -27,9 +25,9 @@ interface UploadApiResponse {
 
 type UploadState = 'idle' | 'uploading' | 'done_failed' | 'done_failed_retryable' | 'done_ai_degraded' | 'done_duplicate' | 'error';
 
-export default function UploadModal({ open, onClose, onSuccess, retryDocumentId, retryFile }: Props) {
+export default function UploadModal({ open, onClose, onSuccess, retryDocumentId }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(retryFile ?? null);
+  const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [uploadState, setUploadState] = useState<UploadState>('idle');
@@ -57,7 +55,6 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
   if (!open) return null;
 
   const isRetryMode = retryDocumentId != null;
-  const noFileForRetry = isRetryMode && !retryFile;
 
   const ACCEPTED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
   const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
@@ -193,25 +190,8 @@ export default function UploadModal({ open, onClose, onSuccess, retryDocumentId,
           <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">✕</button>
         </div>
 
-        {/* No file available for retry */}
-        {noFileForRetry ? (
-          <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
-                          background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '0.85rem 1rem' }}>
-              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>⚠️</span>
-              <div>
-                <p style={{ fontWeight: 700, margin: '0 0 0.2rem', color: '#92400e' }}>Document No Longer Available</p>
-                <p style={{ fontSize: '0.82rem', color: '#78350f', margin: 0 }}>
-                  This document is no longer available for retry. Please upload the PDF again.
-                </p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button className={styles.cancelBtn} onClick={handleClose}>Close</button>
-            </div>
-          </div>
-        ) : /* DUPLICATE state */
-        uploadState === 'done_duplicate' && duplicateResult ? (
+        {/* DUPLICATE state */}
+        {uploadState === 'done_duplicate' && duplicateResult ? (
           <div style={{ padding: '1.25rem 1rem 1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem',
                           background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: '8px', padding: '0.85rem 1rem' }}>

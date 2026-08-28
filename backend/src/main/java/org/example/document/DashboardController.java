@@ -29,8 +29,12 @@ public class DashboardController {
 
         long failed = documentRepository.countByUserIdAndStatus(userId, DocumentStatus.FAILED);
 
+        // Total excludes PROCESSING documents — they are transient and should not inflate
+        // the count until processing completes or fails (consistent with the PO list view).
+        long total = completed + needsReview + failed;
+
         return new DashboardStats(
-                documentRepository.countByUserId(userId),
+                total,
                 completed,
                 needsReview,
                 failed

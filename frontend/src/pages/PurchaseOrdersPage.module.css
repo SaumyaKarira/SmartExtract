@@ -614,21 +614,23 @@
 .retryBtn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border: 1.5px solid #f97316;
-  border-radius: 6px;
-  background: #fff7ed;
-  color: #c2410c;
-  font-size: 12.5px;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1.5px solid var(--blue-300);
+  border-radius: 5px;
+  background: var(--blue-50);
+  color: var(--blue-700);
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  flex-shrink: 0;
 }
 .retryBtn:hover:not(:disabled) {
-  background: #ffedd5;
-  border-color: #ea580c;
+  background: var(--blue-100);
+  border-color: var(--blue-500);
+  box-shadow: 0 1px 4px rgba(37,99,235,0.15);
 }
 .retryBtn:disabled {
   opacity: 0.55;

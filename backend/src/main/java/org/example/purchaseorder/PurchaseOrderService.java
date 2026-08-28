@@ -2,6 +2,7 @@ package org.example.purchaseorder;
 
 import org.example.document.DocumentRepository;
 import org.example.entity.Document;
+import org.example.entity.DocumentStatus;
 import org.example.entity.PurchaseOrder;
 import org.example.entity.PurchaseOrderItem;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,9 @@ public class PurchaseOrderService {
      */
     public List<PurchaseOrderResponse> getByUser(Long userId) {
         return documentRepository.findByUserId(userId).stream()
+                // Exclude documents still being processed — they are transient and should not
+                // appear in the list or affect counts until processing completes or fails.
+                .filter(doc -> doc.getStatus() != DocumentStatus.PROCESSING)
                 .map(this::documentToResponse)
                 .toList();
     }
